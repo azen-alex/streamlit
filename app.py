@@ -399,6 +399,36 @@ def show_hierarchy_visualization():
     # Controls for the diagram
     show_products = st.checkbox("Include Products Layer", value=False, help="Warning: May slow performance with 1000+ products")
     
+    # Quality Overview & Legend
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Quality Distribution
+        quality_counts = products['quality'].value_counts()
+        total_products = len(products)
+        
+        st.markdown("### 📊 Quality Distribution")
+        quality_col1, quality_col2, quality_col3 = st.columns(3)
+        
+        with quality_col1:
+            good_pct = (quality_counts.get('good', 0) / total_products) * 100
+            st.metric("🟢 Good", f"{quality_counts.get('good', 0)}", f"{good_pct:.1f}%")
+        
+        with quality_col2:
+            neutral_pct = (quality_counts.get('neutral', 0) / total_products) * 100
+            st.metric("⚪ Neutral", f"{quality_counts.get('neutral', 0)}", f"{neutral_pct:.1f}%")
+        
+        with quality_col3:
+            poor_pct = (quality_counts.get('poor', 0) / total_products) * 100
+            st.metric("🔴 Poor", f"{quality_counts.get('poor', 0)}", f"{poor_pct:.1f}%")
+    
+    with col2:
+        with st.expander("🎨 Color Rules", expanded=False):
+            st.markdown("**Channel Colors:**")
+            st.caption("🟢 Green: ≥60% good products")
+            st.caption("⚪ Gray: Mixed quality")
+            st.caption("🔴 Red: ≥30% poor products")
+    
     # Create Sankey diagram
     if show_products:
         fig = create_full_sankey_diagram(departments, categories, subcategories, products)
