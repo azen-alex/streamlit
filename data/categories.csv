@@ -1,0 +1,27 @@
+id,department_id,name,description
+1,1,Fruits,Fresh seasonal fruits
+2,1,Vegetables,Fresh vegetables and herbs
+3,1,Salads & Prepared,Ready-to-eat salads and prepared foods
+4,2,Snacks,"Chips, crackers, and snack foods"
+5,2,Pantry Staples,"Canned goods, grains, and cooking essentials"
+6,2,Condiments & Sauces,"Dressings, sauces, and flavor enhancers"
+7,2,Breakfast Items,"Cereals, oatmeal, and breakfast foods"
+8,3,Frozen Meals,Complete frozen dinner options
+9,3,Ice Cream & Desserts,Frozen treats and desserts
+10,3,Frozen Vegetables,Flash-frozen vegetable products
+11,3,Frozen Proteins,Frozen meat and seafood products
+12,4,Milk & Cream,Various milk types and cream products
+13,4,Cheese,Natural and processed cheese varieties
+14,4,Yogurt & Probiotics,Yogurt and fermented dairy products
+15,4,Eggs,Fresh eggs and egg products
+16,5,Fresh Meat,"Fresh cuts of beef, pork, and poultry"
+17,5,Seafood,Fresh and frozen fish and shellfish
+18,5,Deli & Prepared Meats,Sliced meats and prepared options
+19,6,Bread & Rolls,Fresh baked breads and dinner rolls
+20,6,Pastries & Desserts,"Cakes, cookies, and sweet treats"
+21,6,Specialty Baked Goods,Artisan and specialty baked items
+22,7,Soft Drinks,Carbonated and flavored beverages
+23,7,Juices,Fruit and vegetable juices
+24,7,Coffee & Tea,Hot beverage products and accessories
+25,8,Vitamins & Supplements,Health supplements and vitamins
+26,8,Personal Care,Basic personal hygiene products

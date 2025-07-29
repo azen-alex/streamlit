@@ -1,0 +1,77 @@
+id,category_id,name,description
+1,1,Citrus Fruits,"Oranges, lemons, limes, and grapefruits"
+2,1,Berries,"Strawberries, blueberries, raspberries"
+3,1,Tropical Fruits,"Pineapples, mangoes, papayas"
+4,1,Stone Fruits,"Peaches, plums, apricots, cherries"
+5,1,Apples & Pears,Various apple and pear varieties
+6,2,Leafy Greens,"Lettuce, spinach, kale, arugula"
+7,2,Root Vegetables,"Carrots, potatoes, onions, turnips"
+8,2,Cruciferous Vegetables,"Broccoli, cauliflower, Brussels sprouts"
+9,2,Peppers & Squash,"Bell peppers, zucchini, squash varieties"
+10,2,Herbs & Aromatics,Fresh herbs and aromatic vegetables
+11,3,Pre-made Salads,Ready-to-eat salad combinations
+12,3,Cut Vegetables,Pre-cut and prepared vegetables
+13,4,Chips & Crisps,Potato chips and similar snacks
+14,4,Crackers,Various cracker types and brands
+15,4,Nuts & Seeds,Roasted nuts and seed mixes
+16,4,Candy & Sweets,"Chocolates, gummies, and confections"
+17,5,Canned Goods,"Canned vegetables, fruits, and soups"
+18,5,Rice & Grains,"Rice, quinoa, and grain products"
+19,5,Pasta & Noodles,Dried pasta and noodle varieties
+20,5,Cooking Oils,"Olive oil, vegetable oils, and specialty oils"
+21,6,Salad Dressings,Bottled and homemade-style dressings
+22,6,Hot Sauces,Spicy condiments and pepper sauces
+23,6,Marinades,Meat and vegetable marinades
+24,7,Cereals,Cold breakfast cereals
+25,7,Oatmeal & Hot Cereals,Hot breakfast options
+26,7,Pancake & Waffle Mix,Breakfast baking mixes
+27,8,Pizza,Frozen pizza varieties
+28,8,TV Dinners,Complete frozen meal trays
+29,8,International Cuisine,Ethnic frozen food options
+30,9,Ice Cream,Premium and regular ice cream
+31,9,Frozen Yogurt,Healthier frozen dessert options
+32,9,Popsicles & Bars,Frozen treats on sticks
+33,10,Mixed Vegetables,Frozen vegetable medleys
+34,10,Single Vegetables,Individual frozen vegetables
+35,11,Frozen Chicken,Frozen chicken products
+36,11,Frozen Seafood,Frozen fish and shellfish
+37,12,Regular Milk,"Whole, 2%, 1%, and skim milk"
+38,12,Alternative Milks,"Almond, soy, oat, and other plant milks"
+39,12,Cream Products,"Heavy cream, half-and-half, whipped cream"
+40,13,Hard Cheeses,"Cheddar, Swiss, parmesan varieties"
+41,13,Soft Cheeses,"Brie, camembert, cream cheese"
+42,13,Shredded Cheese,Pre-shredded cheese blends
+43,14,Greek Yogurt,High-protein Greek-style yogurt
+44,14,Regular Yogurt,Traditional yogurt varieties
+45,14,Probiotic Drinks,Kefir and other probiotic beverages
+46,15,Chicken Eggs,Regular and free-range chicken eggs
+47,15,Specialty Eggs,"Duck, quail, and other specialty eggs"
+48,16,Beef,Fresh beef cuts and ground beef
+49,16,Pork,"Pork chops, bacon, and pork products"
+50,16,Poultry,"Chicken, turkey, and other poultry"
+51,17,Fresh Fish,Daily fresh fish selection
+52,17,Shellfish,"Shrimp, crab, lobster, and mollusks"
+53,18,Sliced Meats,Deli-sliced lunch meats
+54,18,Prepared Sausages,Ready-to-cook sausage varieties
+55,19,Sandwich Bread,Sliced bread for sandwiches
+56,19,Artisan Breads,Specialty and artisan bread varieties
+57,19,Dinner Rolls,Small rolls and buns
+58,20,Cakes,Fresh baked cakes and cupcakes
+59,20,Cookies,Fresh baked cookies and biscuits
+60,20,Donuts & Pastries,"Donuts, croissants, and pastries"
+61,21,Gluten-Free Options,Gluten-free baked goods
+62,21,Seasonal Items,Holiday and seasonal baked goods
+63,22,Cola Drinks,Cola and cola-flavored beverages
+64,22,Flavored Sodas,Fruit and specialty flavored sodas
+65,22,Sparkling Water,Carbonated water varieties
+66,23,Orange Juice,Fresh and from-concentrate orange juice
+67,23,Mixed Fruit Juices,Blended fruit juice varieties
+68,23,Vegetable Juices,V8 and other vegetable-based juices
+69,24,Ground Coffee,Pre-ground coffee varieties
+70,24,Coffee Beans,Whole bean coffee options
+71,24,Tea Bags,Bagged tea varieties
+72,24,Loose Leaf Tea,Bulk loose leaf tea options
+73,25,Daily Vitamins,Multivitamins and daily supplements
+74,25,Specialty Supplements,Targeted health supplements
+75,26,Oral Care,"Toothpaste, mouthwash, dental care"
+76,26,Hair Care,"Shampoo, conditioner, styling products"
