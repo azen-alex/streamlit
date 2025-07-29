@@ -302,6 +302,11 @@ def generate_products():
             if random.random() < 0.05:  # 5% chance of being out of stock
                 stock_quantity = 0
             
+            # Add quality field with weighted distribution
+            quality_choices = ["good", "neutral", "poor"]
+            quality_weights = [50, 35, 15]  # 50% good, 35% neutral, 15% poor
+            quality = random.choices(quality_choices, weights=quality_weights)[0]
+            
             products.append({
                 "id": product_id,
                 "subcategory_id": subcategory_id,
@@ -311,7 +316,8 @@ def generate_products():
                 "unit": unit,
                 "sku": f"SKU-{product_id:06d}",
                 "barcode": fake.ean13(),
-                "description": f"High quality {product_name.lower()} available in our store"
+                "description": f"High quality {product_name.lower()} available in our store",
+                "quality": quality
             })
             product_id += 1
     

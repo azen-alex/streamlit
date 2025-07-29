@@ -402,16 +402,40 @@ def show_hierarchy_visualization():
     # Create Sankey diagram
     if show_products:
         fig = create_full_sankey_diagram(departments, categories, subcategories, products)
-        st.info("💡 Showing all 4 levels. **Channel width = product count** - thicker flows = more products.")
+        st.info("💡 Showing all 4 levels. **Width = product count, Color = quality** (🟢 Good, ⚪ Neutral, 🔴 Poor)")
     else:
         fig = create_sankey_diagram(departments, categories, subcategories)
-        st.info("💡 Showing 3 levels. **Channel width = product count** - thicker flows = more products.")
+        st.info("💡 Showing 3 levels. **Width = product count, Color = quality** (🟢 Good, ⚪ Neutral, 🔴 Poor)")
     
     # Display the diagram
     st.plotly_chart(fig, use_container_width=True)
 
+def get_quality_color(products_df):
+    """Calculate the dominant quality color for a group of products"""
+    if len(products_df) == 0:
+        return "rgba(158, 158, 158, 0.4)"  # Default gray
+    
+    # Count quality distribution
+    quality_counts = products_df['quality'].value_counts()
+    total_products = len(products_df)
+    
+    # Calculate percentages
+    good_pct = quality_counts.get('good', 0) / total_products
+    poor_pct = quality_counts.get('poor', 0) / total_products
+    
+    # Color based on dominant quality (with thresholds)
+    if good_pct >= 0.6:  # 60%+ good = green
+        return "rgba(76, 175, 80, 0.4)"    # Green
+    elif poor_pct >= 0.3:  # 30%+ poor = red  
+        return "rgba(244, 67, 54, 0.4)"    # Red
+    else:  # Mixed or neutral dominant = gray
+        return "rgba(158, 158, 158, 0.4)"  # Gray
+
 def create_sankey_diagram(departments, categories, subcategories):
     """Create a 3-level Sankey diagram (Departments → Categories → Subcategories)"""
+    
+    # Load products data for counting
+    _, _, _, products = load_data()
     
     # Define neutral color palette
     dept_color = "rgba(149, 165, 166, 0.8)"  # Light gray
@@ -443,34 +467,40 @@ def create_sankey_diagram(departments, categories, subcategories):
     value = []
     link_colors = []
     
-    # Departments to Categories (width = product count in category)
+    # Departments to Categories (width = product count, color = quality)
     for _, cat in categories.iterrows():
         dept_idx = departments[departments['id'] == cat['department_id']].index[0]
         cat_idx = len(departments) + categories[categories['id'] == cat['id']].index[0]
         
-        # Count products in this category
+        # Count products and calculate quality in this category
         cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
         cat_products = products[products['subcategory_id'].isin(cat_subcats['id'])]
         product_count = len(cat_products)
         
+        # Calculate dominant quality for this category
+        color = get_quality_color(cat_products)
+        
         source.append(dept_idx)
         target.append(cat_idx)
         value.append(max(1, product_count))  # Use product count as width
-        link_colors.append("rgba(149, 165, 166, 0.3)")
+        link_colors.append(color)
     
-    # Categories to Subcategories (width = product count in subcategory)
+    # Categories to Subcategories (width = product count, color = quality)
     for _, subcat in subcategories.iterrows():
         cat_idx = len(departments) + categories[categories['id'] == subcat['category_id']].index[0]
         subcat_idx = len(departments) + len(categories) + subcategories[subcategories['id'] == subcat['id']].index[0]
         
-        # Count products in this subcategory
+        # Count products and calculate quality in this subcategory
         subcat_products = products[products['subcategory_id'] == subcat['id']]
         product_count = len(subcat_products)
+        
+        # Calculate dominant quality for this subcategory
+        color = get_quality_color(subcat_products)
         
         source.append(cat_idx)
         target.append(subcat_idx)
         value.append(max(1, product_count))  # Use product count as width
-        link_colors.append("rgba(127, 140, 141, 0.3)")
+        link_colors.append(color)
     
     # Create the Sankey diagram
     fig = go.Figure(data=[go.Sankey(
@@ -490,7 +520,7 @@ def create_sankey_diagram(departments, categories, subcategories):
     )])
     
     fig.update_layout(
-        title="Grocery Store Hierarchy Flow (Channel Width = Product Count)",
+        title="Grocery Store Hierarchy Flow (Width = Product Count, Color = Quality)",
         title_x=0.5,
         font_size=12,
         plot_bgcolor='rgba(0,0,0,0)',
@@ -562,44 +592,57 @@ def create_sankey_diagram_with_products(departments, categories, subcategories, 
     # Get all products for counting (use original products, not limited)
     all_products = load_data()[3]  # Get full product list
     
-    # Departments to Categories (width = product count in category)
+    # Departments to Categories (width = product count, color = quality)
     for _, cat in categories.iterrows():
         dept_idx = departments[departments['id'] == cat['department_id']].index[0]
         cat_idx = cat_offset + categories[categories['id'] == cat['id']].index[0]
         
-        # Count products in this category
+        # Count products and calculate quality in this category
         cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
         cat_products = all_products[all_products['subcategory_id'].isin(cat_subcats['id'])]
         product_count = len(cat_products)
         
+        # Calculate dominant quality for this category
+        color = get_quality_color(cat_products)
+        
         source.append(dept_idx)
         target.append(cat_idx)
         value.append(max(1, product_count))
-        link_colors.append("rgba(149, 165, 166, 0.3)")
+        link_colors.append(color)
     
-    # Categories to Subcategories (width = product count in subcategory)
+    # Categories to Subcategories (width = product count, color = quality)
     for _, subcat in subcategories.iterrows():
         cat_idx = cat_offset + categories[categories['id'] == subcat['category_id']].index[0]
         subcat_idx = subcat_offset + subcategories[subcategories['id'] == subcat['id']].index[0]
         
-        # Count products in this subcategory
+        # Count products and calculate quality in this subcategory
         subcat_products = all_products[all_products['subcategory_id'] == subcat['id']]
         product_count = len(subcat_products)
+        
+        # Calculate dominant quality for this subcategory
+        color = get_quality_color(subcat_products)
         
         source.append(cat_idx)
         target.append(subcat_idx)
         value.append(max(1, product_count))
-        link_colors.append("rgba(127, 140, 141, 0.3)")
+        link_colors.append(color)
     
-    # Subcategories to Products (each individual product = 1)
+    # Subcategories to Products (color = individual product quality)
     for _, product in products.iterrows():
         subcat_idx = subcat_offset + subcategories[subcategories['id'] == product['subcategory_id']].index[0]
         product_idx = product_offset + products[products['id'] == product['id']].index[0]
         
+        # Color based on individual product quality
+        quality_color = {
+            'good': "rgba(76, 175, 80, 0.4)",    # Green
+            'neutral': "rgba(158, 158, 158, 0.4)", # Gray  
+            'poor': "rgba(244, 67, 54, 0.4)"      # Red
+        }.get(product['quality'], "rgba(158, 158, 158, 0.4)")
+        
         source.append(subcat_idx)
         target.append(product_idx)
         value.append(1)  # Each individual product has weight 1
-        link_colors.append("rgba(52, 73, 94, 0.3)")
+        link_colors.append(quality_color)
     
     # Create the diagram
     fig = go.Figure(data=[go.Sankey(
@@ -619,7 +662,7 @@ def create_sankey_diagram_with_products(departments, categories, subcategories, 
     )])
     
     fig.update_layout(
-        title="Complete Grocery Store Hierarchy (Channel Width = Product Count)",
+        title="Complete Grocery Store Hierarchy (Width = Product Count, Color = Quality)",
         title_x=0.5,
         font_size=10,
         plot_bgcolor='rgba(0,0,0,0)',
