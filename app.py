@@ -387,7 +387,7 @@ def show_data_explorer():
 
 def show_hierarchy_visualization():
     """Display hierarchy visualization with Sankey diagram"""
-    st.markdown('<h1 class="main-header">🌐 Hierarchy Visualization & Management</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🌐 Hierarchy Visualization</h1>', unsafe_allow_html=True)
     
     # Load data
     departments, categories, subcategories, products = load_data()
@@ -396,133 +396,19 @@ def show_hierarchy_visualization():
         st.warning("Please generate sample data first by running `python scripts/generate_data.py`")
         return
     
-    # Overview section
-    st.markdown('<h2 class="section-header">📊 Hierarchy Overview</h2>', unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Departments", len(departments), help="Top-level categories")
-    with col2:
-        st.metric("Categories", len(categories), help="Product groupings")
-    with col3:
-        st.metric("Subcategories", len(subcategories), help="Detailed classifications")
-    with col4:
-        st.metric("Products", len(products), help="Individual items")
-    
-    # Sankey diagram section
-    st.markdown('<h2 class="section-header">🔀 Interactive Hierarchy Flow</h2>', unsafe_allow_html=True)
-    
     # Controls for the diagram
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.markdown("**Visualization Controls:**")
-    with col2:
-        show_products = st.checkbox("Include Products Layer", value=False, help="Warning: May slow performance with 1000+ products")
+    show_products = st.checkbox("Include Products Layer", value=False, help="Warning: May slow performance with 1000+ products")
     
     # Create Sankey diagram
     if show_products:
         fig = create_full_sankey_diagram(departments, categories, subcategories, products)
-        st.info("💡 Showing all 4 levels. Hover over flows to see details. Products layer may take a moment to render.")
+        st.info("💡 Showing all 4 levels. Hover over flows to see details.")
     else:
         fig = create_sankey_diagram(departments, categories, subcategories)
-        st.info("💡 Showing 3 levels (Departments → Categories → Subcategories). Enable 'Include Products Layer' to see the complete hierarchy.")
+        st.info("💡 Showing 3 levels (Departments → Categories → Subcategories).")
     
     # Display the diagram
     st.plotly_chart(fig, use_container_width=True)
-    
-    # Analysis section
-    st.markdown('<h2 class="section-header">📈 Hierarchy Analysis</h2>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### Department Distribution")
-        dept_sizes = []
-        dept_names = []
-        
-        for _, dept in departments.iterrows():
-            dept_categories = categories[categories['department_id'] == dept['id']]
-            dept_subcats = subcategories[subcategories['category_id'].isin(dept_categories['id'])]
-            dept_products = products[products['subcategory_id'].isin(dept_subcats['id'])]
-            
-            dept_sizes.append(len(dept_products))
-            dept_names.append(dept['name'])
-        
-        # Create bar chart with neutral colors
-        fig_bar = px.bar(
-            x=dept_names, 
-            y=dept_sizes,
-            title="Products per Department",
-            color=dept_sizes,
-            color_continuous_scale="Greys"
-        )
-        fig_bar.update_layout(
-            xaxis_title="Department",
-            yaxis_title="Number of Products",
-            showlegend=False,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    with col2:
-        st.markdown("### Hierarchy Depth Analysis")
-        
-        # Calculate branching factors
-        avg_cats_per_dept = len(categories) / len(departments)
-        avg_subcats_per_cat = len(subcategories) / len(categories)
-        avg_products_per_subcat = len(products) / len(subcategories)
-        
-        metrics_data = {
-            'Level': ['Dept → Cat', 'Cat → Subcat', 'Subcat → Product'],
-            'Avg Branching': [avg_cats_per_dept, avg_subcats_per_cat, avg_products_per_subcat]
-        }
-        
-        fig_metrics = px.line(
-            x=metrics_data['Level'],
-            y=metrics_data['Avg Branching'],
-            title="Average Branching Factor by Level",
-            markers=True
-        )
-        fig_metrics.update_traces(
-            line_color='#7f8c8d',
-            marker_color='#34495e',
-            marker_size=10
-        )
-        fig_metrics.update_layout(
-            xaxis_title="Hierarchy Level",
-            yaxis_title="Average Children per Parent",
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig_metrics, use_container_width=True)
-    
-    # Detailed breakdown
-    st.markdown('<h2 class="section-header">🔍 Detailed Breakdown</h2>', unsafe_allow_html=True)
-    
-    selected_dept = st.selectbox("Select Department for Detailed View:", 
-                                departments['name'].tolist())
-    
-    if selected_dept:
-        dept_id = departments[departments['name'] == selected_dept]['id'].iloc[0]
-        dept_categories = categories[categories['department_id'] == dept_id]
-        
-        st.markdown(f"### {selected_dept} - Category Breakdown")
-        
-        category_details = []
-        for _, cat in dept_categories.iterrows():
-            cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
-            cat_products = products[products['subcategory_id'].isin(cat_subcats['id'])]
-            
-            category_details.append({
-                'Category': cat['name'],
-                'Subcategories': len(cat_subcats),
-                'Products': len(cat_products),
-                'Avg Products/Subcat': len(cat_products) / len(cat_subcats) if len(cat_subcats) > 0 else 0
-            })
-        
-        details_df = pd.DataFrame(category_details)
-        st.dataframe(details_df, use_container_width=True, hide_index=True)
 
 def create_sankey_diagram(departments, categories, subcategories):
     """Create a 3-level Sankey diagram (Departments → Categories → Subcategories)"""
