@@ -402,10 +402,10 @@ def show_hierarchy_visualization():
     # Create Sankey diagram
     if show_products:
         fig = create_full_sankey_diagram(departments, categories, subcategories, products)
-        st.info("💡 Showing all 4 levels. Hover over flows to see details.")
+        st.info("💡 Showing all 4 levels. **Channel width = product count** - thicker flows = more products.")
     else:
         fig = create_sankey_diagram(departments, categories, subcategories)
-        st.info("💡 Showing 3 levels (Departments → Categories → Subcategories).")
+        st.info("💡 Showing 3 levels. **Channel width = product count** - thicker flows = more products.")
     
     # Display the diagram
     st.plotly_chart(fig, use_container_width=True)
@@ -443,24 +443,33 @@ def create_sankey_diagram(departments, categories, subcategories):
     value = []
     link_colors = []
     
-    # Departments to Categories
+    # Departments to Categories (width = product count in category)
     for _, cat in categories.iterrows():
         dept_idx = departments[departments['id'] == cat['department_id']].index[0]
         cat_idx = len(departments) + categories[categories['id'] == cat['id']].index[0]
         
+        # Count products in this category
+        cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
+        cat_products = products[products['subcategory_id'].isin(cat_subcats['id'])]
+        product_count = len(cat_products)
+        
         source.append(dept_idx)
         target.append(cat_idx)
-        value.append(1)  # Each category has weight 1
+        value.append(max(1, product_count))  # Use product count as width
         link_colors.append("rgba(149, 165, 166, 0.3)")
     
-    # Categories to Subcategories
+    # Categories to Subcategories (width = product count in subcategory)
     for _, subcat in subcategories.iterrows():
         cat_idx = len(departments) + categories[categories['id'] == subcat['category_id']].index[0]
         subcat_idx = len(departments) + len(categories) + subcategories[subcategories['id'] == subcat['id']].index[0]
         
+        # Count products in this subcategory
+        subcat_products = products[products['subcategory_id'] == subcat['id']]
+        product_count = len(subcat_products)
+        
         source.append(cat_idx)
         target.append(subcat_idx)
-        value.append(1)  # Each subcategory has weight 1
+        value.append(max(1, product_count))  # Use product count as width
         link_colors.append("rgba(127, 140, 141, 0.3)")
     
     # Create the Sankey diagram
@@ -481,7 +490,7 @@ def create_sankey_diagram(departments, categories, subcategories):
     )])
     
     fig.update_layout(
-        title="Grocery Store Hierarchy Flow (Departments → Categories → Subcategories)",
+        title="Grocery Store Hierarchy Flow (Channel Width = Product Count)",
         title_x=0.5,
         font_size=12,
         plot_bgcolor='rgba(0,0,0,0)',
@@ -550,34 +559,46 @@ def create_sankey_diagram_with_products(departments, categories, subcategories, 
     subcat_offset = len(departments) + len(categories)
     product_offset = len(departments) + len(categories) + len(subcategories)
     
-    # Departments to Categories
+    # Get all products for counting (use original products, not limited)
+    all_products = load_data()[3]  # Get full product list
+    
+    # Departments to Categories (width = product count in category)
     for _, cat in categories.iterrows():
         dept_idx = departments[departments['id'] == cat['department_id']].index[0]
         cat_idx = cat_offset + categories[categories['id'] == cat['id']].index[0]
         
+        # Count products in this category
+        cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
+        cat_products = all_products[all_products['subcategory_id'].isin(cat_subcats['id'])]
+        product_count = len(cat_products)
+        
         source.append(dept_idx)
         target.append(cat_idx)
-        value.append(2)
+        value.append(max(1, product_count))
         link_colors.append("rgba(149, 165, 166, 0.3)")
     
-    # Categories to Subcategories  
+    # Categories to Subcategories (width = product count in subcategory)
     for _, subcat in subcategories.iterrows():
         cat_idx = cat_offset + categories[categories['id'] == subcat['category_id']].index[0]
         subcat_idx = subcat_offset + subcategories[subcategories['id'] == subcat['id']].index[0]
         
+        # Count products in this subcategory
+        subcat_products = all_products[all_products['subcategory_id'] == subcat['id']]
+        product_count = len(subcat_products)
+        
         source.append(cat_idx)
         target.append(subcat_idx)
-        value.append(2)
+        value.append(max(1, product_count))
         link_colors.append("rgba(127, 140, 141, 0.3)")
     
-    # Subcategories to Products
+    # Subcategories to Products (each individual product = 1)
     for _, product in products.iterrows():
         subcat_idx = subcat_offset + subcategories[subcategories['id'] == product['subcategory_id']].index[0]
         product_idx = product_offset + products[products['id'] == product['id']].index[0]
         
         source.append(subcat_idx)
         target.append(product_idx)
-        value.append(1)
+        value.append(1)  # Each individual product has weight 1
         link_colors.append("rgba(52, 73, 94, 0.3)")
     
     # Create the diagram
@@ -598,7 +619,7 @@ def create_sankey_diagram_with_products(departments, categories, subcategories, 
     )])
     
     fig.update_layout(
-        title="Complete Grocery Store Hierarchy (4 Levels - Limited Products Shown)",
+        title="Complete Grocery Store Hierarchy (Channel Width = Product Count)",
         title_x=0.5,
         font_size=10,
         plot_bgcolor='rgba(0,0,0,0)',
