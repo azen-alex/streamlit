@@ -34,6 +34,26 @@ data/
 - **Contextual Placement**: Users need to see where recommended items would appear in the hierarchy
 - **Bulk Operations**: Ability to approve/reject multiple items efficiently
 
+### **Approval Workflow Overview**
+```mermaid
+flowchart TD
+    A[New Products Recommended Weekly] --> B[Auto-placed in Hierarchy with Flags]
+    B --> C[Manager Reviews Every Few Months]
+    C --> D{Review Decision}
+    D -->|Approve| E[Product Goes Live]
+    D -->|Reject| F[Product Removed]
+    D -->|Defer| G[Review Later]
+    E --> H[Logged to History]
+    F --> H
+    G --> H
+    H --> I[Analytics & Reporting]
+    
+    style A fill:#e1f5fe
+    style E fill:#e8f5e8
+    style F fill:#ffebee
+    style H fill:#f3e5f5
+```
+
 ### **Core Requirements**
 1. **Visual Integration**: Recommended products appear in-place within the hierarchy with visual indicators
 2. **Toggle Visibility**: Show/hide recommended products as needed
@@ -87,6 +107,61 @@ data/
 └── temporal_quality.csv       # Existing quality data
 ```
 
+### **Data Architecture & Relationships**
+```mermaid
+erDiagram
+    PRODUCTS {
+        int id PK
+        string name
+        string status
+        datetime recommendation_date
+        string reviewed_by
+        datetime review_date
+    }
+    
+    APPROVAL_HISTORY {
+        int history_id PK
+        int product_id FK
+        string action
+        string reviewed_by
+        datetime review_date
+        string session_id
+        string decision_reason
+    }
+    
+    REVIEW_SESSIONS {
+        string session_id PK
+        string user_id
+        datetime start_time
+        datetime end_time
+        int total_reviewed
+        int total_approved
+    }
+    
+    DEPARTMENTS {
+        int id PK
+        string name
+    }
+    
+    CATEGORIES {
+        int id PK
+        string name
+        int department_id FK
+    }
+    
+    SUBCATEGORIES {
+        int id PK
+        string name
+        int category_id FK
+    }
+    
+    PRODUCTS ||--o{ APPROVAL_HISTORY : "generates"
+    APPROVAL_HISTORY }o--|| REVIEW_SESSIONS : "grouped_by"
+    PRODUCTS }o--|| SUBCATEGORIES : "belongs_to"
+    SUBCATEGORIES }o--|| CATEGORIES : "belongs_to"
+    CATEGORIES }o--|| DEPARTMENTS : "belongs_to"
+```
+
 ### **Comprehensive Approval History Schema**
 ```python
 # approval_history.csv - Complete audit trail of all decisions:
@@ -137,6 +212,31 @@ data/
 ---
 
 ## 🎨 **UI/UX Design Approach**
+
+### **User Interface Flow**
+```mermaid
+flowchart LR
+    A[Manager Opens App] --> B[Tree Hierarchy View]
+    B --> C{Show Recommended?}
+    C -->|Yes| D[See Products with 🔍 Icons]
+    C -->|No| E[See Only Approved Products]
+    D --> F[Select Products]
+    F --> G[Bulk Actions Panel]
+    G --> H{Choose Action}
+    H -->|Approve| I[✅ Add to Live Hierarchy]
+    H -->|Reject| J[❌ Remove from View]
+    H -->|Defer| K[⏭️ Review Later]
+    I --> L[Log Decision + Reason]
+    J --> L
+    K --> L
+    L --> M[Update History Dashboard]
+    
+    style A fill:#e3f2fd
+    style D fill:#fff3e0
+    style I fill:#e8f5e8
+    style J fill:#ffebee
+    style L fill:#f3e5f5
+```
 
 ### **Visual Status Indicators**
 ```python
@@ -239,6 +339,28 @@ if st.button("View Decision History", key=f"history_{product_id}"):
 
 ## 🛠️ **Implementation Plan**
 
+### **Implementation Timeline Overview**
+```mermaid
+gantt
+    title Recommended Products Feature Implementation
+    dateFormat  YYYY-MM-DD
+    section Phase 1
+    Basic Approval           :p1, 2024-01-01, 2w
+    Status Indicators        :p1a, 2024-01-01, 1w
+    History Logging          :p1b, 2024-01-08, 1w
+    section Phase 2
+    Bulk Operations          :p2, after p1, 1w
+    Session Tracking         :p2a, after p1, 1w
+    section Phase 3
+    Advanced History         :p3, after p2, 2w
+    Analytics Dashboard      :p3a, after p2, 1w
+    Historical Visualization :p3b, after p3a, 1w
+    section Phase 4
+    Drag & Drop              :p4, after p3, 3w
+    Reorganization Tools     :p4a, after p3, 2w
+    Change Management        :p4b, after p4a, 1w
+```
+
 ### **Phase 1: Basic In-Place Approval** ⏱️ *~1-2 weeks*
 **Goal**: Get core approval workflow working with existing UI
 
@@ -284,6 +406,37 @@ if st.button("View Decision History", key=f"history_{product_id}"):
    - Save/resume review sessions
    - Track review progress
    - Session summary statistics
+
+### **History Tracking Workflow**
+```mermaid
+flowchart TD
+    A[User Action] --> B{Action Type}
+    B -->|Individual Approve| C[Log Single Decision]
+    B -->|Bulk Operation| D[Log Bulk Operation]
+    B -->|Session Start| E[Create Session Record]
+    
+    C --> F[Record to approval_history.csv]
+    D --> G[Record Each Item + Bulk ID]
+    E --> H[Record to review_sessions.csv]
+    
+    F --> I[Update Product Status]
+    G --> I
+    
+    I --> J[Generate Analytics]
+    H --> J
+    
+    J --> K{Generate Reports?}
+    K -->|Yes| L[Create Dashboard Updates]
+    K -->|No| M[Wait for Next Action]
+    
+    L --> N[Update decision_analytics.csv]
+    N --> O[Refresh UI Metrics]
+    
+    style A fill:#e3f2fd
+    style F fill:#e8f5e8
+    style J fill:#fff3e0
+    style O fill:#f3e5f5
+```
 
 #### **Deliverables**:
 - Select multiple recommended products
@@ -360,6 +513,58 @@ if st.button("View Decision History", key=f"history_{product_id}"):
 ---
 
 ## 🔧 **Component Recommendations**
+
+### **Technical Architecture Overview**
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        A[Streamlit App]
+        B[streamlit-tree-select]
+        C[Plotly Charts]
+        D[Bulk Action Controls]
+    end
+    
+    subgraph "Data Processing Layer"
+        E[Pandas DataFrames]
+        F[Status Filtering Logic]
+        G[History Logging Functions]
+        H[Analytics Engine]
+    end
+    
+    subgraph "Storage Layer"
+        I[products.csv]
+        J[approval_history.csv]
+        K[review_sessions.csv]
+        L[decision_analytics.csv]
+    end
+    
+    subgraph "Future Extensions"
+        M[streamlit-draggable-list]
+        N[streamlit-flow]
+        O[Advanced Analytics]
+    end
+    
+    A --> B
+    A --> C
+    A --> D
+    B --> E
+    D --> F
+    F --> G
+    G --> H
+    E --> I
+    G --> J
+    G --> K
+    H --> L
+    
+    M -.-> A
+    N -.-> A
+    O -.-> H
+    
+    style A fill:#e3f2fd
+    style E fill:#fff3e0
+    style I fill:#e8f5e8
+    style M fill:#f3e5f5
+```
 
 ### **Current Stack (Keep)**
 - ✅ **streamlit-tree-select**: Perfect for current tree navigation
