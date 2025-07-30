@@ -544,6 +544,13 @@ def filter_products_by_status(products, show_recommended=True, show_rejected=Fal
     
     return filtered
 
+def create_count_label(name, total_products, recommended_products):
+    """Create enhanced label showing total products and recommendations"""
+    if recommended_products > 0:
+        return f"{name} ({total_products} products, {recommended_products} recommendations)"
+    else:
+        return f"{name} ({total_products} products)"
+
 def show_tree_hierarchy():
     """Display interactive tree hierarchy with streamlit-tree-select"""
     st.markdown('<h1 class="main-header">🌳 Interactive Tree Hierarchy</h1>', unsafe_allow_html=True)
@@ -625,13 +632,14 @@ def show_tree_hierarchy():
             # Get categories for this department
             dept_categories = categories[categories['department_id'] == dept['id']]
             
-            # Count total products in this department (filtered)
+            # Count total and recommended products in this department (filtered)
             dept_subcats = subcategories[subcategories['category_id'].isin(dept_categories['id'])]
             dept_products = filtered_products[filtered_products['subcategory_id'].isin(dept_subcats['id'])]
             dept_count = len(dept_products)
+            dept_recommended_count = len(dept_products[dept_products['status'] == 'recommended'])
             
             dept_node = {
-                "label": f"{dept['name']} ({dept_count} products)",
+                "label": create_count_label(dept['name'], dept_count, dept_recommended_count),
                 "value": f"dept_{dept['id']}",
                 "children": []
             }
@@ -641,9 +649,10 @@ def show_tree_hierarchy():
                 cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
                 cat_products = filtered_products[filtered_products['subcategory_id'].isin(cat_subcats['id'])]
                 cat_count = len(cat_products)
+                cat_recommended_count = len(cat_products[cat_products['status'] == 'recommended'])
                 
                 cat_node = {
-                    "label": f"{cat['name']} ({cat_count} products)",
+                    "label": create_count_label(cat['name'], cat_count, cat_recommended_count),
                     "value": f"cat_{cat['id']}",
                     "children": []
                 }
@@ -652,9 +661,10 @@ def show_tree_hierarchy():
                     # Get products for this subcategory (filtered)
                     subcat_products = filtered_products[filtered_products['subcategory_id'] == subcat['id']]
                     subcat_count = len(subcat_products)
+                    subcat_recommended_count = len(subcat_products[subcat_products['status'] == 'recommended'])
                     
                     subcat_node = {
-                        "label": f"{subcat['name']} ({subcat_count} products)",
+                        "label": create_count_label(subcat['name'], subcat_count, subcat_recommended_count),
                         "value": f"subcat_{subcat['id']}",
                         "children": []
                     }
