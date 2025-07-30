@@ -582,6 +582,59 @@ def bulk_update_product_status(product_ids, new_status, reviewed_by="Manager", r
     
     return len(product_ids)
 
+def validate_category_path(dept_id, cat_id, subcat_id, departments, categories, subcategories):
+    """Validate that the category hierarchy path is valid"""
+    try:
+        # Check if department exists
+        if dept_id not in departments['id'].values:
+            return False
+            
+        # Check if category exists and belongs to department
+        cat_row = categories[categories['id'] == cat_id]
+        if len(cat_row) == 0 or cat_row['department_id'].iloc[0] != dept_id:
+            return False
+            
+        # Check if subcategory exists and belongs to category
+        subcat_row = subcategories[subcategories['id'] == subcat_id]
+        if len(subcat_row) == 0 or subcat_row['category_id'].iloc[0] != cat_id:
+            return False
+            
+        return True
+    except:
+        return False
+
+def get_product_hierarchy_path(product_id, products, subcategories, categories, departments):
+    """Get the full hierarchy path for a product"""
+    try:
+        product = products[products['id'] == product_id].iloc[0]
+        subcat = subcategories[subcategories['id'] == product['subcategory_id']].iloc[0]
+        cat = categories[categories['id'] == subcat['category_id']].iloc[0]
+        dept = departments[departments['id'] == cat['department_id']].iloc[0]
+        
+        return f"{dept['name']} > {cat['name']} > {subcat['name']}"
+    except:
+        return "Unknown"
+
+def bulk_approve_and_move(product_ids, new_subcategory_id, reviewed_by="Manager"):
+    """Approve products and move them to new subcategory"""
+    import pandas as pd
+    from datetime import datetime
+    
+    # Load current products
+    products_df = pd.read_csv('data/products.csv')
+    
+    # Update both status and subcategory for selected products
+    mask = products_df['id'].isin(product_ids)
+    products_df.loc[mask, 'status'] = 'approved'
+    products_df.loc[mask, 'subcategory_id'] = new_subcategory_id
+    products_df.loc[mask, 'reviewed_by'] = reviewed_by
+    products_df.loc[mask, 'review_date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Save updated products
+    products_df.to_csv('data/products.csv', index=False)
+    
+    return len(product_ids)
+
 def show_tree_hierarchy():
     """Display interactive tree hierarchy with streamlit-tree-select"""
     st.markdown('<h1 class="main-header">🌳 Interactive Tree Hierarchy</h1>', unsafe_allow_html=True)
@@ -852,7 +905,7 @@ def show_tree_hierarchy():
                     st.markdown("#### 🎯 Bulk Actions")
                     
                     # Action buttons
-                    col_btn1, col_btn2, col_btn3 = st.columns(3)
+                    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
                     
                     with col_btn1:
                         if rec_count > 0:
@@ -938,6 +991,117 @@ def show_tree_hierarchy():
                                         st.info("💡 Please provide a reason for rejection")
                     
                     with col_btn3:
+                        if rec_count > 0:
+                            if st.button(f"🔄 Approve & Move ({rec_count})", 
+                                       use_container_width=True,
+                                       key="bulk_approve_move"):
+                                # Show the Approve & Move modal (double width)
+                                # Use custom CSS to make the expander wider
+                                st.markdown("""
+                                <style>
+                                .approve-move-modal .stExpander > div:first-child {
+                                    width: 200% !important;
+                                    max-width: none !important;
+                                }
+                                </style>
+                                """, unsafe_allow_html=True)
+                                
+                                with st.container():
+                                    st.markdown('<div class="approve-move-modal">', unsafe_allow_html=True)
+                                    with st.expander("🔄 Approve & Move Products", expanded=True):
+                                        recommended_ids = status_breakdown['recommended']['id'].tolist()
+                                        recommended_products = status_breakdown['recommended']
+                                        
+                                        st.warning(f"You are approving {rec_count} recommended products:")
+                                        
+                                        # Bulk destination selector
+                                        st.markdown("#### 🎯 Move all products to:")
+                                        col_dest1, col_dest2, col_dest3 = st.columns(3)
+                                        
+                                        with col_dest1:
+                                            dept_options = [(dept['id'], dept['name']) for _, dept in departments.iterrows()]
+                                            selected_dept = st.selectbox(
+                                                "Department",
+                                                options=[opt[0] for opt in dept_options],
+                                                format_func=lambda x: next(opt[1] for opt in dept_options if opt[0] == x),
+                                                key="bulk_move_dept"
+                                            )
+                                        
+                                        with col_dest2:
+                                            dept_categories = categories[categories['department_id'] == selected_dept]
+                                            cat_options = [(cat['id'], cat['name']) for _, cat in dept_categories.iterrows()]
+                                            if cat_options:
+                                                selected_cat = st.selectbox(
+                                                    "Category",
+                                                    options=[opt[0] for opt in cat_options],
+                                                    format_func=lambda x: next(opt[1] for opt in cat_options if opt[0] == x),
+                                                    key="bulk_move_cat"
+                                                )
+                                            else:
+                                                st.warning("No categories in selected department")
+                                                selected_cat = None
+                                        
+                                        with col_dest3:
+                                            if selected_cat:
+                                                cat_subcategories = subcategories[subcategories['category_id'] == selected_cat]
+                                                subcat_options = [(subcat['id'], subcat['name']) for _, subcat in cat_subcategories.iterrows()]
+                                                if subcat_options:
+                                                    selected_subcat = st.selectbox(
+                                                        "Subcategory",
+                                                        options=[opt[0] for opt in subcat_options],
+                                                        format_func=lambda x: next(opt[1] for opt in subcat_options if opt[0] == x),
+                                                        key="bulk_move_subcat"
+                                                    )
+                                                else:
+                                                    st.warning("No subcategories in selected category")
+                                                    selected_subcat = None
+                                            else:
+                                                selected_subcat = None
+                                    
+                                        # Show destination path
+                                        if selected_dept and selected_cat and selected_subcat:
+                                            dest_dept = departments[departments['id'] == selected_dept]['name'].iloc[0]
+                                            dest_cat = categories[categories['id'] == selected_cat]['name'].iloc[0]
+                                            dest_subcat = subcategories[subcategories['id'] == selected_subcat]['name'].iloc[0]
+                                            dest_path = f"{dest_dept} > {dest_cat} > {dest_subcat}"
+                                            st.info(f"📍 Destination: {dest_path}")
+                                        
+                                            # Show products being moved
+                                            st.markdown("#### 📦 Products to approve & move:")
+                                            for _, product in recommended_products.iterrows():
+                                                current_path = get_product_hierarchy_path(
+                                                    product['id'], products, subcategories, categories, departments
+                                                )
+                                                col_prod1, col_prod2 = st.columns([1, 1])
+                                                with col_prod1:
+                                                    st.write(f"**{product['name']}**")
+                                                    st.caption(f"Currently: {current_path}")
+                                                with col_prod2:
+                                                    st.write("→")
+                                                    st.caption(f"Moving to: {dest_path}")
+                                        
+                                            # Action buttons
+                                            col_confirm1, col_confirm2 = st.columns(2)
+                                            with col_confirm1:
+                                                if st.button("✅ Confirm Approve & Move All", type="primary", key="confirm_approve_move"):
+                                                    # Validate destination exists
+                                                    if validate_category_path(selected_dept, selected_cat, selected_subcat, 
+                                                                             departments, categories, subcategories):
+                                                        # Execute approve + move operation
+                                                        results = bulk_approve_and_move(recommended_ids, selected_subcat)
+                                                        st.success(f"✅ Approved and moved {results} products!")
+                                                        st.rerun()
+                                                    else:
+                                                        st.error("❌ Invalid destination category. Please select a valid path.")
+                                            
+                                            with col_confirm2:
+                                                if st.button("❌ Cancel", key="cancel_approve_move"):
+                                                    st.rerun()
+                                        else:
+                                            st.warning("⚠️ Please select a complete destination path (Department > Category > Subcategory)")
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    with col_btn4:
                         st.button("📊 Review History", 
                                 use_container_width=True,
                                 key="view_history",
