@@ -77,7 +77,7 @@ flowchart TD
 - **Enhanced Tree View**: Extend current `streamlit-tree-select` with status indicators
 - **Status-Based Filtering**: Dynamic show/hide based on product approval state
 - **CSV-Based State Management**: Add status columns to existing product data
-- **Session State Tracking**: Maintain UI state for review sessions
+- **Session State Tracking**: Maintain UI state between app interactions
 
 ---
 
@@ -102,8 +102,7 @@ data/
 │   ├── subcategories.csv
 │   └── products.csv
 ├── workflow_tracking/          # Audit trail
-│   ├── approval_history.csv    # Complete approval history
-│   └── review_sessions.csv     # Manager review session tracking
+│   └── approval_history.csv    # Complete approval history
 └── temporal_quality.csv       # Existing quality data
 ```
 
@@ -125,17 +124,7 @@ erDiagram
         string action
         string reviewed_by
         datetime review_date
-        string session_id
         string decision_reason
-    }
-    
-    REVIEW_SESSIONS {
-        string session_id PK
-        string user_id
-        datetime start_time
-        datetime end_time
-        int total_reviewed
-        int total_approved
     }
     
     DEPARTMENTS {
@@ -156,7 +145,6 @@ erDiagram
     }
     
     PRODUCTS ||--o{ APPROVAL_HISTORY : "generates"
-    APPROVAL_HISTORY }o--|| REVIEW_SESSIONS : "grouped_by"
     PRODUCTS }o--|| SUBCATEGORIES : "belongs_to"
     SUBCATEGORIES }o--|| CATEGORIES : "belongs_to"
     CATEGORIES }o--|| DEPARTMENTS : "belongs_to"
@@ -173,7 +161,6 @@ erDiagram
 - new_status: string                    # Status after this action
 - reviewed_by: string                   # User/manager who made the decision
 - review_date: datetime                 # Timestamp of decision
-- review_session_id: string             # Groups decisions made in same session
 - hierarchy_path: string                # "Department > Category > Subcategory" at time of decision
 - decision_reason: string               # Optional reason/notes for the decision
 - bulk_operation_id: string             # Links decisions made in bulk operations
@@ -181,20 +168,6 @@ erDiagram
 - review_duration_seconds: int          # Time spent reviewing this item
 - ip_address: string                    # Source IP for security/audit purposes
 - user_agent: string                    # Browser/device information
-```
-
-```python
-# review_sessions.csv - Track manager review sessions:
-- session_id: string                    # Unique session identifier
-- user_id: string                       # Manager/reviewer identifier
-- start_time: datetime                  # When review session began
-- end_time: datetime                    # When review session ended
-- total_reviewed: int                   # Number of items reviewed
-- total_approved: int                   # Number of items approved
-- total_rejected: int                   # Number of items rejected
-- total_deferred: int                   # Number of items deferred
-- session_notes: string                 # General notes about the session
-- batch_type: string                    # "weekly" | "monthly" | "adhoc"
 ```
 
 ```python
@@ -331,8 +304,6 @@ if st.button("View Decision History", key=f"history_{product_id}"):
                         st.write(f"*Reason: {decision.decision_reason}*")
                 with col2:
                     st.write(decision.review_date.strftime("%Y-%m-%d %H:%M"))
-                with col3:
-                    st.write(f"Session: {decision.review_session_id[:8]}...")
 ```
 
 ---
@@ -350,7 +321,6 @@ gantt
     History Logging          :p1b, 2024-01-08, 1w
     section Phase 2
     Bulk Operations          :p2, after p1, 1w
-    Session Tracking         :p2a, after p1, 1w
     section Phase 3
     Advanced History         :p3, after p2, 2w
     Analytics Dashboard      :p3a, after p2, 1w
@@ -402,28 +372,20 @@ gantt
    - Confirmation dialogs for bulk actions
    - Progress indicators for large batches
 
-3. **Review Session Management**
-   - Save/resume review sessions
-   - Track review progress
-   - Session summary statistics
-
 ### **History Tracking Workflow**
 ```mermaid
 flowchart TD
     A[User Action] --> B{Action Type}
     B -->|Individual Approve| C[Log Single Decision]
     B -->|Bulk Operation| D[Log Bulk Operation]
-    B -->|Session Start| E[Create Session Record]
     
     C --> F[Record to approval_history.csv]
     D --> G[Record Each Item + Bulk ID]
-    E --> H[Record to review_sessions.csv]
     
     F --> I[Update Product Status]
     G --> I
     
     I --> J[Generate Analytics]
-    H --> J
     
     J --> K{Generate Reports?}
     K -->|Yes| L[Create Dashboard Updates]
@@ -441,7 +403,6 @@ flowchart TD
 #### **Deliverables**:
 - Select multiple recommended products
 - Bulk approve/reject with confirmation
-- Review session persistence
 
 ### **Phase 3: Advanced History & Analytics** ⏱️ *~2 weeks*
 **Goal**: Comprehensive audit trail and decision analytics system
@@ -449,16 +410,14 @@ flowchart TD
 #### **Tasks**:
 1. **Complete Audit Trail System**
    - Implement comprehensive approval history logging with all metadata
-   - Track review session start/end times and user attribution
    - Log decision reasoning and review duration tracking
-   - Capture bulk operation relationships and session grouping
+   - Capture bulk operation relationships and audit grouping
    - Record IP addresses and user agents for security audit
    - Implement automatic history cleanup and archival policies
 
 2. **Historical Data Visualization**
    - Timeline view of approval/rejection decisions
    - Decision pattern analysis charts
-   - Review session performance metrics
    - User-specific approval pattern tracking
    - Category/department approval rate comparisons
    - Historical trend analysis over time
@@ -467,12 +426,11 @@ flowchart TD
    - Filter by decision date ranges
    - Filter by reviewing user/manager
    - Search decision reasons and notes
-   - Filter by approval patterns and session types
+   - Filter by approval patterns and user types
    - Advanced query builder for complex history searches
 
 4. **Analytics Dashboard**
    - Real-time approval rate statistics
-   - Review session efficiency analytics
    - Recommendation accuracy scoring
    - User performance comparisons
    - Category-specific decision patterns
@@ -534,8 +492,7 @@ graph TB
     subgraph "Storage Layer"
         I[products.csv]
         J[approval_history.csv]
-        K[review_sessions.csv]
-        L[decision_analytics.csv]
+        K[decision_analytics.csv]
     end
     
     subgraph "Future Extensions"
@@ -553,8 +510,7 @@ graph TB
     G --> H
     E --> I
     G --> J
-    G --> K
-    H --> L
+    H --> K
     
     M -.-> A
     N -.-> A

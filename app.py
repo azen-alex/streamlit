@@ -615,62 +615,7 @@ def show_tree_hierarchy():
             else:
                 st.warning("No products will be visible with current filters!")
             
-            # ========== SESSION MANAGEMENT ==========
-            st.markdown("---")
-            st.markdown("### 📝 Review Session")
-            
-            # Initialize session state for review tracking
-            if 'review_session_active' not in st.session_state:
-                st.session_state.review_session_active = False
-                st.session_state.session_start_time = None
-                st.session_state.session_approvals = 0
-                st.session_state.session_rejections = 0
-            
-            # Session controls
-            if not st.session_state.review_session_active:
-                if st.button("▶️ Start Review Session", use_container_width=True, type="primary"):
-                    from datetime import datetime
-                    st.session_state.review_session_active = True
-                    st.session_state.session_start_time = datetime.now()
-                    st.session_state.session_approvals = 0
-                    st.session_state.session_rejections = 0
-                    st.success("📝 Review session started!")
-                    st.rerun()
-                
-                st.info("💡 Start a session to track your review progress")
-            
-            else:
-                # Show active session info
-                from datetime import datetime
-                duration = datetime.now() - st.session_state.session_start_time
-                duration_minutes = int(duration.total_seconds() // 60)
-                
-                st.success("🟢 Active Session")
-                
-                col_session1, col_session2 = st.columns(2)
-                with col_session1:
-                    st.metric("⏱️ Duration", f"{duration_minutes}m")
-                with col_session2:
-                    total_actions = st.session_state.session_approvals + st.session_state.session_rejections
-                    st.metric("⚡ Actions", total_actions)
-                
-                # Session details
-                col_app, col_rej = st.columns(2)
-                with col_app:
-                    st.metric("✅ Approved", st.session_state.session_approvals)
-                with col_rej:
-                    st.metric("❌ Rejected", st.session_state.session_rejections)
-                
-                # End session button
-                if st.button("⏹️ End Session", use_container_width=True, type="secondary"):
-                    total_actions = st.session_state.session_approvals + st.session_state.session_rejections
-                    st.info(f"📊 Session Summary: {total_actions} actions in {duration_minutes} minutes")
-                    st.session_state.review_session_active = False
-                    st.session_state.session_start_time = None
-                    st.session_state.session_approvals = 0
-                    st.session_state.session_rejections = 0
-                    st.rerun()
-            # ========== END SESSION MANAGEMENT ==========
+
     
     # Filter products based on sidebar controls
     filtered_products = filter_products_by_status(
@@ -942,10 +887,6 @@ def show_tree_hierarchy():
                                                 review_reason=reason
                                             )
                                             
-                                            # Update session tracking
-                                            if st.session_state.review_session_active:
-                                                st.session_state.session_approvals += updated_count
-                                            
                                             st.success(f"✅ Successfully approved {updated_count} products!")
                                             st.rerun()
                                     
@@ -986,10 +927,6 @@ def show_tree_hierarchy():
                                                     reviewed_by="Manager",
                                                     review_reason=reason
                                                 )
-                                                
-                                                # Update session tracking
-                                                if st.session_state.review_session_active:
-                                                    st.session_state.session_rejections += updated_count
                                                 
                                                 st.success(f"❌ Successfully rejected {updated_count} products!")
                                                 st.rerun()
