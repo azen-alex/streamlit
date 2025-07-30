@@ -42,10 +42,8 @@ flowchart TD
     C --> D{Review Decision}
     D -->|Approve| E[Product Goes Live]
     D -->|Reject| F[Product Removed]
-    D -->|Defer| G[Review Later]
     E --> H[Logged to History]
     F --> H
-    G --> H
     H --> I[Analytics & Reporting]
     
     style A fill:#e1f5fe
@@ -156,7 +154,7 @@ erDiagram
 - history_id: int                       # Unique identifier for each history record
 - product_id: int                       # Reference to the product
 - product_name: string                  # Product name at time of decision (may change later)
-- action: 'approved' | 'rejected' | 'deferred' | 'moved' | 'edited'  # Type of action taken
+- action: 'approved' | 'rejected' | 'moved' | 'edited'  # Type of action taken
 - previous_status: string               # Status before this action
 - new_status: string                    # Status after this action
 - reviewed_by: string                   # User/manager who made the decision
@@ -198,10 +196,8 @@ flowchart LR
     G --> H{Choose Action}
     H -->|Approve| I[✅ Add to Live Hierarchy]
     H -->|Reject| J[❌ Remove from View]
-    H -->|Defer| K[⏭️ Review Later]
     I --> L[Log Decision + Reason]
     J --> L
-    K --> L
     L --> M[Update History Dashboard]
     
     style A fill:#e3f2fd
@@ -260,7 +256,7 @@ with col1:
 with col2:
     reviewer_filter = st.selectbox("Reviewer", ["All"] + list_of_reviewers)
 with col3:
-    action_filter = st.multiselect("Actions", ["approved", "rejected", "deferred"])
+    action_filter = st.multiselect("Actions", ["approved", "rejected"])
 
 # History display options
 view_type = st.radio("View Type", ["Timeline", "Table", "Analytics"])

@@ -852,7 +852,7 @@ def show_tree_hierarchy():
                     st.markdown("#### 🎯 Bulk Actions")
                     
                     # Action buttons
-                    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+                    col_btn1, col_btn2, col_btn3 = st.columns(3)
                     
                     with col_btn1:
                         if rec_count > 0:
@@ -938,13 +938,6 @@ def show_tree_hierarchy():
                                         st.info("💡 Please provide a reason for rejection")
                     
                     with col_btn3:
-                        if rec_count > 0:
-                            if st.button(f"⏭️ Defer All ({rec_count})", 
-                                       use_container_width=True,
-                                       key="bulk_defer"):
-                                st.info("⏭️ Defer functionality will be implemented in Phase 3")
-                    
-                    with col_btn4:
                         st.button("📊 Review History", 
                                 use_container_width=True,
                                 key="view_history",
