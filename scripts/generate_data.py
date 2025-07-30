@@ -16,6 +16,7 @@ import random
 from faker import Faker
 from pathlib import Path
 import json
+from datetime import datetime, timedelta
 
 # Initialize Faker for generating realistic data
 fake = Faker()
@@ -323,6 +324,111 @@ def generate_products():
     
     return pd.DataFrame(products)
 
+def generate_temporal_quality_data(products_df):
+    """
+    Generates temporal quality data showing how product quality distribution changes over time.
+    Creates 12 monthly snapshots with realistic quality evolution patterns.
+    """
+    temporal_quality_data = []
+    
+    # Create 12 monthly time periods
+    time_periods = [
+        ("2023-01", "January 2023"),
+        ("2023-02", "February 2023"),
+        ("2023-03", "March 2023"),
+        ("2023-04", "April 2023"),
+        ("2023-05", "May 2023"),
+        ("2023-06", "June 2023"),
+        ("2023-07", "July 2023"),
+        ("2023-08", "August 2023"),
+        ("2023-09", "September 2023"),
+        ("2023-10", "October 2023"),
+        ("2023-11", "November 2023"),
+        ("2023-12", "December 2023"),
+    ]
+    
+    for _, product in products_df.iterrows():
+        product_id = product["id"]
+        product_name = product["name"]
+        subcategory_id = product["subcategory_id"]
+        base_price = product["price"]
+        base_stock = product["stock_quantity"]
+        initial_quality = product["quality"]
+        
+        # Initialize quality probabilities based on initial quality
+        if initial_quality == "good":
+            quality_probabilities = {"good": 0.7, "neutral": 0.25, "poor": 0.05}
+        elif initial_quality == "neutral":
+            quality_probabilities = {"good": 0.3, "neutral": 0.5, "poor": 0.2}
+        else:  # poor
+            quality_probabilities = {"good": 0.1, "neutral": 0.3, "poor": 0.6}
+        
+        for period_idx, (period_id, period_name) in enumerate(time_periods):
+            # Simulate quality evolution over time
+            # Products tend to improve in spring/summer, decline in winter
+            seasonal_modifier = 0.1 if period_idx in [2, 3, 4, 5, 6, 7] else -0.1  # Mar-Aug better
+            
+            # Random quality shifts (supply chain improvements/issues)
+            random_shift = random.uniform(-0.15, 0.15)
+            
+            # Apply temporal changes to quality probabilities
+            total_modifier = seasonal_modifier + random_shift
+            
+            # Adjust probabilities
+            new_good_prob = max(0.05, min(0.85, quality_probabilities["good"] + total_modifier))
+            new_poor_prob = max(0.05, min(0.85, quality_probabilities["poor"] - total_modifier))
+            new_neutral_prob = 1.0 - new_good_prob - new_poor_prob
+            
+            # Ensure probabilities are valid
+            if new_neutral_prob < 0:
+                new_neutral_prob = 0.1
+                new_good_prob = 0.9 - new_poor_prob
+            
+            # Generate multiple instances of this product in this time period
+            # Number of instances varies by product (simulating different batches/shipments)
+            num_instances = random.randint(5, 25)  # 5-25 instances per product per period
+            
+            for instance in range(num_instances):
+                # Generate quality for this instance
+                quality = random.choices(
+                    ["good", "neutral", "poor"], 
+                    weights=[new_good_prob, new_neutral_prob, new_poor_prob]
+                )[0]
+                
+                # Price fluctuations based on quality and seasonality
+                quality_price_modifier = {"good": 1.1, "neutral": 1.0, "poor": 0.9}
+                seasonal_price_modifier = 1.0 + random.uniform(-0.1, 0.1)
+                instance_price_variation = random.uniform(0.95, 1.05)  # Small variation per instance
+                
+                period_price = round(base_price * quality_price_modifier[quality] * seasonal_price_modifier * instance_price_variation, 2)
+                
+                # Stock quantity per instance (smaller amounts)
+                instance_stock = max(1, round(base_stock / num_instances * random.uniform(0.7, 1.3)))
+                
+                temporal_quality_data.append({
+                    "product_id": product_id,
+                    "product_name": product_name,
+                    "subcategory_id": subcategory_id,
+                    "period_id": period_id,
+                    "period_name": period_name,
+                    "period_index": period_idx,
+                    "quality": quality,
+                    "price": period_price,
+                    "stock_quantity": instance_stock,
+                    "instance_id": instance + 1  # Track which instance this is
+                })
+            
+            # Update probabilities for next period (momentum based on this period's overall trend)
+            period_qualities = [random.choices(["good", "neutral", "poor"], weights=[new_good_prob, new_neutral_prob, new_poor_prob])[0] for _ in range(10)]
+            period_good_ratio = period_qualities.count("good") / len(period_qualities)
+            period_poor_ratio = period_qualities.count("poor") / len(period_qualities)
+            
+            quality_probabilities["good"] = new_good_prob * 0.8 + 0.2 * period_good_ratio
+            quality_probabilities["poor"] = new_poor_prob * 0.8 + 0.2 * period_poor_ratio
+            quality_probabilities["neutral"] = 1.0 - quality_probabilities["good"] - quality_probabilities["poor"]
+    
+    return pd.DataFrame(temporal_quality_data)
+
 def save_data():
     """Generate all data and save to CSV files"""
     print("🏗️  Generating grocery store data...")
@@ -343,6 +449,9 @@ def save_data():
     
     print("📊 Generating products (this may take a moment)...")
     products_df = generate_products()
+
+    print("📊 Generating temporal quality data...")
+    temporal_quality_df = generate_temporal_quality_data(products_df)
     
     # Save to CSV files
     print("💾 Saving data to CSV files...")
@@ -350,6 +459,7 @@ def save_data():
     categories_df.to_csv(data_dir / "categories.csv", index=False)
     subcategories_df.to_csv(data_dir / "subcategories.csv", index=False)
     products_df.to_csv(data_dir / "products.csv", index=False)
+    temporal_quality_df.to_csv(data_dir / "temporal_quality.csv", index=False)
     
     # Print summary statistics
     print("\n✅ Data generation complete!")

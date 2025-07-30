@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import plotly.graph_objects as go
 import plotly.express as px
+from streamlit_tree_select import tree_select
 
 # Page configuration
 st.set_page_config(
@@ -103,17 +104,18 @@ def load_data():
     
     if not data_path.exists():
         st.error("Data directory not found. Please run data generation first.")
-        return None, None, None, None
+        return None, None, None, None, None
     
     try:
         departments = pd.read_csv(data_path / "departments.csv")
         categories = pd.read_csv(data_path / "categories.csv")
         subcategories = pd.read_csv(data_path / "subcategories.csv")
         products = pd.read_csv(data_path / "products.csv")
-        return departments, categories, subcategories, products
+        temporal_quality = pd.read_csv(data_path / "temporal_quality.csv")
+        return departments, categories, subcategories, products, temporal_quality
     except FileNotFoundError as e:
         st.error(f"Data file not found: {e}")
-        return None, None, None, None
+        return None, None, None, None, None
 
 def show_documentation():
     """Display the documentation page"""
@@ -270,7 +272,7 @@ def show_data_explorer():
     st.markdown('<h1 class="main-header">🛒 Grocery Store Data Explorer</h1>', unsafe_allow_html=True)
     
     # Load data
-    departments, categories, subcategories, products = load_data()
+    departments, categories, subcategories, products, _ = load_data()
     
     if departments is None:
         st.warning("Please generate sample data first by running `python scripts/generate_data.py`")
@@ -385,322 +387,418 @@ def show_data_explorer():
     else:
         st.warning("No products found with the current filters.")
 
-def show_hierarchy_visualization():
-    """Display hierarchy visualization with Sankey diagram"""
-    st.markdown('<h1 class="main-header">🌐 Hierarchy Visualization</h1>', unsafe_allow_html=True)
+def create_quality_waterfall_chart(selected_product_ids, temporal_quality):
+    """Create a waterfall chart showing quality distribution changes over time"""
+    if not selected_product_ids:
+        return None
+    
+    # Filter temporal data for selected products
+    filtered_temporal = temporal_quality[temporal_quality['product_id'].isin(selected_product_ids)]
+    
+    if filtered_temporal.empty:
+        return None
+    
+    # Calculate quality distribution for each time period
+    period_quality_counts = (
+        filtered_temporal.groupby(['period_index', 'period_name', 'quality'])
+        .size()
+        .unstack(fill_value=0)
+        .reset_index()
+        .sort_values('period_index')  # Sort by chronological order
+    )
+    
+    # Calculate cumulative changes from the baseline
+    baseline_good = period_quality_counts.iloc[0]['good'] if 'good' in period_quality_counts.columns else 0
+    baseline_neutral = period_quality_counts.iloc[0]['neutral'] if 'neutral' in period_quality_counts.columns else 0
+    baseline_poor = period_quality_counts.iloc[0]['poor'] if 'poor' in period_quality_counts.columns else 0
+    
+    # Prepare waterfall data
+    periods = period_quality_counts['period_name'].tolist()
+    good_changes = []
+    neutral_changes = []
+    poor_changes = []
+    
+    for i, row in period_quality_counts.iterrows():
+        if i == 0:  # First period is baseline
+            good_changes.append(row.get('good', 0))
+            neutral_changes.append(row.get('neutral', 0))
+            poor_changes.append(row.get('poor', 0))
+        else:
+            prev_row = period_quality_counts.iloc[i-1]
+            good_changes.append(row.get('good', 0) - prev_row.get('good', 0))
+            neutral_changes.append(row.get('neutral', 0) - prev_row.get('neutral', 0))
+            poor_changes.append(row.get('poor', 0) - prev_row.get('poor', 0))
+    
+    # Create the waterfall chart
+    fig = go.Figure()
+    
+    # Add traces for each quality level
+    fig.add_trace(go.Waterfall(
+        name="Good Quality",
+        orientation="v",
+        measure=["absolute"] + ["relative"] * (len(periods) - 1),
+        x=periods,
+        textposition="outside",
+        text=[f"+{val}" if val > 0 else str(val) for val in good_changes],
+        y=good_changes,
+        connector={"line": {"color": "rgb(63, 63, 63)"}},
+        increasing={"marker": {"color": "#2E8B57"}},
+        decreasing={"marker": {"color": "#DC143C"}},
+        totals={"marker": {"color": "#4682B4"}}
+    ))
+    
+    fig.update_layout(
+        title="Quality Distribution Changes Over Time",
+        title_x=0.5,
+        showlegend=False,
+        xaxis_title="Time Period",
+        yaxis_title="Quality Count Change",
+        font_size=12,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=400
+    )
+    
+    return fig
+
+def create_quality_distribution_chart(selected_product_ids, temporal_quality):
+    """Create a stacked bar chart showing quality distribution over time"""
+    if not selected_product_ids:
+        return None
+    
+    # Filter temporal data for selected products
+    filtered_temporal = temporal_quality[temporal_quality['product_id'].isin(selected_product_ids)]
+    
+    if filtered_temporal.empty:
+        return None
+    
+    # Calculate quality distribution for each time period
+    period_quality_counts = (
+        filtered_temporal.groupby(['period_index', 'period_name', 'quality'])
+        .size()
+        .unstack(fill_value=0)
+        .reset_index()
+        .sort_values('period_index')  # Sort by chronological order
+    )
+    
+    # Create stacked bar chart
+    fig = go.Figure()
+    
+    colors = {
+        'good': '#7CB9A8',      # Soft Seafoam Green
+        'neutral': '#9B9B9B',   # Soft Grey
+        'poor': '#D4827E'       # Soft Coral
+    }
+    
+    for quality in ['good', 'neutral', 'poor']:
+        if quality in period_quality_counts.columns:
+            fig.add_trace(go.Bar(
+                name=quality.title(),
+                x=period_quality_counts['period_name'],
+                y=period_quality_counts[quality],
+                marker_color=colors[quality],
+                text=period_quality_counts[quality],
+                textposition='inside'
+            ))
+    
+    fig.update_layout(
+        title="Quality Distribution Over Time (Selected Products)",
+        title_x=0.5,
+        barmode='stack',
+        xaxis_title="Time Period",
+        yaxis_title="Number of Products",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        font_size=12,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=400
+    )
+    
+    return fig
+
+def show_tree_hierarchy():
+    """Display interactive tree hierarchy with streamlit-tree-select"""
+    st.markdown('<h1 class="main-header">🌳 Interactive Tree Hierarchy</h1>', unsafe_allow_html=True)
     
     # Load data
-    departments, categories, subcategories, products = load_data()
+    departments, categories, subcategories, products, temporal_quality = load_data()
     
     if departments is None:
         st.warning("Please generate sample data first by running `python scripts/generate_data.py`")
         return
     
-    # Controls for the diagram
-    show_products = st.checkbox("Include Products Layer", value=False, help="Warning: May slow performance with 1000+ products")
+    st.markdown('<h2 class="section-header">🔍 Tree-Based Navigation</h2>', unsafe_allow_html=True)
     
-    # Quality Overview & Legend
-    col1, col2 = st.columns([2, 1])
+    st.markdown("""
+    <div class="info-box">
+    <strong>🎯 Interactive Tree Selection:</strong> This view allows you to select at ALL hierarchy levels! 
+    Choose entire departments (🏢), specific categories (📂), subcategories (🏷️), or even individual products (🛒) using the checkbox tree below. 
+    The system will intelligently aggregate all your selections - perfect for granular product analysis!
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Build tree structure for streamlit-tree-select
+    def build_tree_nodes():
+        tree_nodes = []
+        
+        for _, dept in departments.iterrows():
+            # Get categories for this department
+            dept_categories = categories[categories['department_id'] == dept['id']]
+            
+            # Count total products in this department
+            dept_subcats = subcategories[subcategories['category_id'].isin(dept_categories['id'])]
+            dept_products = products[products['subcategory_id'].isin(dept_subcats['id'])]
+            dept_count = len(dept_products)
+            
+            dept_node = {
+                "label": f"{dept['name']} ({dept_count} products)",
+                "value": f"dept_{dept['id']}",
+                "children": []
+            }
+            
+            for _, cat in dept_categories.iterrows():
+                # Get subcategories for this category
+                cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
+                cat_products = products[products['subcategory_id'].isin(cat_subcats['id'])]
+                cat_count = len(cat_products)
+                
+                cat_node = {
+                    "label": f"{cat['name']} ({cat_count} products)",
+                    "value": f"cat_{cat['id']}",
+                    "children": []
+                }
+                
+                for _, subcat in cat_subcats.iterrows():
+                    # Get products for this subcategory
+                    subcat_products = products[products['subcategory_id'] == subcat['id']]
+                    subcat_count = len(subcat_products)
+                    
+                    subcat_node = {
+                        "label": f"{subcat['name']} ({subcat_count} products)",
+                        "value": f"subcat_{subcat['id']}",
+                        "children": []
+                    }
+                    
+                    # Add individual products as children of subcategory
+                    for _, product in subcat_products.iterrows():
+                        product_node = {
+                            "label": f"{product['name']} - ${product['price']:.2f}",
+                            "value": f"product_{product['id']}"
+                        }
+                        subcat_node["children"].append(product_node)
+                    
+                    cat_node["children"].append(subcat_node)
+                
+                dept_node["children"].append(cat_node)
+            
+            tree_nodes.append(dept_node)
+        
+        return tree_nodes
+    
+    # Create tree nodes
+    nodes = build_tree_nodes()
+    
+    # Display tree selector
+    col1, col2 = st.columns([1, 2])
     
     with col1:
-        # Quality Distribution
-        quality_counts = products['quality'].value_counts()
-        total_products = len(products)
-        
-        st.markdown("### 📊 Quality Distribution")
-        quality_col1, quality_col2, quality_col3 = st.columns(3)
-        
-        with quality_col1:
-            good_pct = (quality_counts.get('good', 0) / total_products) * 100
-            st.metric("🟢 Good", f"{quality_counts.get('good', 0)}", f"{good_pct:.1f}%")
-        
-        with quality_col2:
-            neutral_pct = (quality_counts.get('neutral', 0) / total_products) * 100
-            st.metric("⚪ Neutral", f"{quality_counts.get('neutral', 0)}", f"{neutral_pct:.1f}%")
-        
-        with quality_col3:
-            poor_pct = (quality_counts.get('poor', 0) / total_products) * 100
-            st.metric("🔴 Poor", f"{quality_counts.get('poor', 0)}", f"{poor_pct:.1f}%")
+        st.markdown("### 📋 Select Hierarchy Levels")
+        return_select = tree_select(
+            nodes,
+            check_model="all",  # Allow selection at all levels (departments, categories, subcategories)
+            expanded=["dept_1", "dept_2"],  # Expand first two departments by default
+            no_cascade=False,  # Allow parent selection to cascade to children
+            show_expand_all=True  # Show expand/collapse all buttons
+        )
     
     with col2:
-        with st.expander("🎨 Color Rules", expanded=False):
-            st.markdown("**Channel Colors:**")
-            st.caption("🟢 Green: ≥60% good products")
-            st.caption("⚪ Gray: Mixed quality")
-            st.caption("🔴 Red: ≥30% poor products")
-    
-    # Create Sankey diagram
-    if show_products:
-        fig = create_full_sankey_diagram(departments, categories, subcategories, products)
-        st.info("💡 Showing all 4 levels. **Width = product count, Color = quality** (🟢 Good, ⚪ Neutral, 🔴 Poor)")
-    else:
-        fig = create_sankey_diagram(departments, categories, subcategories)
-        st.info("💡 Showing 3 levels. **Width = product count, Color = quality** (🟢 Good, ⚪ Neutral, 🔴 Poor)")
-    
-    # Display the diagram
-    st.plotly_chart(fig, use_container_width=True)
-
-def get_quality_color(products_df):
-    """Calculate the dominant quality color for a group of products"""
-    if len(products_df) == 0:
-        return "rgba(158, 158, 158, 0.4)"  # Default gray
-    
-    # Count quality distribution
-    quality_counts = products_df['quality'].value_counts()
-    total_products = len(products_df)
-    
-    # Calculate percentages
-    good_pct = quality_counts.get('good', 0) / total_products
-    poor_pct = quality_counts.get('poor', 0) / total_products
-    
-    # Color based on dominant quality (with thresholds)
-    if good_pct >= 0.6:  # 60%+ good = green
-        return "rgba(76, 175, 80, 0.4)"    # Green
-    elif poor_pct >= 0.3:  # 30%+ poor = red  
-        return "rgba(244, 67, 54, 0.4)"    # Red
-    else:  # Mixed or neutral dominant = gray
-        return "rgba(158, 158, 158, 0.4)"  # Gray
-
-def create_sankey_diagram(departments, categories, subcategories):
-    """Create a 3-level Sankey diagram (Departments → Categories → Subcategories)"""
-    
-    # Load products data for counting
-    _, _, _, products = load_data()
-    
-    # Define neutral color palette
-    dept_color = "rgba(149, 165, 166, 0.8)"  # Light gray
-    cat_color = "rgba(127, 140, 141, 0.8)"   # Medium gray  
-    subcat_color = "rgba(52, 73, 94, 0.8)"   # Dark gray
-    
-    # Create nodes
-    nodes = []
-    node_colors = []
-    
-    # Add department nodes
-    for _, dept in departments.iterrows():
-        nodes.append(dept['name'])
-        node_colors.append(dept_color)
-    
-    # Add category nodes  
-    for _, cat in categories.iterrows():
-        nodes.append(cat['name'])
-        node_colors.append(cat_color)
-    
-    # Add subcategory nodes
-    for _, subcat in subcategories.iterrows():
-        nodes.append(subcat['name'])
-        node_colors.append(subcat_color)
-    
-    # Create links
-    source = []
-    target = []
-    value = []
-    link_colors = []
-    
-    # Departments to Categories (width = product count, color = quality)
-    for _, cat in categories.iterrows():
-        dept_idx = departments[departments['id'] == cat['department_id']].index[0]
-        cat_idx = len(departments) + categories[categories['id'] == cat['id']].index[0]
+        st.markdown("### 📊 Quality Evolution Over Time")
         
-        # Count products and calculate quality in this category
-        cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
-        cat_products = products[products['subcategory_id'].isin(cat_subcats['id'])]
-        product_count = len(cat_products)
+        if return_select and return_select.get('checked'):
+            selected_values = return_select['checked']
+            
+            # Parse selected IDs at all levels
+            selected_dept_ids = []
+            selected_cat_ids = []
+            selected_subcat_ids = []
+            selected_product_ids = []
+            
+            for value in selected_values:
+                if value.startswith('dept_'):
+                    dept_id = int(value.replace('dept_', ''))
+                    selected_dept_ids.append(dept_id)
+                elif value.startswith('cat_'):
+                    cat_id = int(value.replace('cat_', ''))
+                    selected_cat_ids.append(cat_id)
+                elif value.startswith('subcat_'):
+                    subcat_id = int(value.replace('subcat_', ''))
+                    selected_subcat_ids.append(subcat_id)
+                elif value.startswith('product_'):
+                    product_id = int(value.replace('product_', ''))
+                    selected_product_ids.append(product_id)
+            
+            # Build comprehensive product filter based on all selections
+            all_relevant_product_ids = set()
+            
+            # Add products from direct product selections
+            all_relevant_product_ids.update(selected_product_ids)
+            
+            # Add products from direct subcategory selections
+            for subcat_id in selected_subcat_ids:
+                subcat_products = products[products['subcategory_id'] == subcat_id]['id'].tolist()
+                all_relevant_product_ids.update(subcat_products)
+            
+            # Add products from selected categories
+            for cat_id in selected_cat_ids:
+                cat_subcats = subcategories[subcategories['category_id'] == cat_id]['id'].tolist()
+                cat_products = products[products['subcategory_id'].isin(cat_subcats)]['id'].tolist()
+                all_relevant_product_ids.update(cat_products)
+            
+            # Add products from selected departments
+            for dept_id in selected_dept_ids:
+                dept_cats = categories[categories['department_id'] == dept_id]['id'].tolist()
+                dept_subcats = subcategories[subcategories['category_id'].isin(dept_cats)]['id'].tolist()
+                dept_products = products[products['subcategory_id'].isin(dept_subcats)]['id'].tolist()
+                all_relevant_product_ids.update(dept_products)
+            
+            if all_relevant_product_ids:
+                # Show selection summary
+                col2_1, col2_2, col2_3 = st.columns(3)
+                
+                with col2_1:
+                    total_selections = len(selected_dept_ids) + len(selected_cat_ids) + len(selected_subcat_ids) + len(selected_product_ids)
+                    st.metric("Total Selections", total_selections)
+                
+                with col2_2:
+                    st.metric("Relevant Products", len(all_relevant_product_ids))
+                
+                with col2_3:
+                    # Calculate quality distribution for current period
+                    current_quality = temporal_quality[
+                        (temporal_quality['product_id'].isin(list(all_relevant_product_ids))) &
+                        (temporal_quality['period_id'] == '2023-12')  # Latest period
+                    ]
+                    good_count = len(current_quality[current_quality['quality'] == 'good'])
+                    st.metric("Current Good Quality", f"{good_count}")
+                
+                # Create and display quality distribution chart
+                dist_chart = create_quality_distribution_chart(list(all_relevant_product_ids), temporal_quality)
+                if dist_chart:
+                    st.plotly_chart(dist_chart, use_container_width=True, config={'displayModeBar': False})
+                
+                # Show quality trend analysis
+                st.markdown("#### 📈 Quality Trend Analysis")
+                
+                # Calculate quality trends
+                filtered_temporal = temporal_quality[temporal_quality['product_id'].isin(list(all_relevant_product_ids))]
+                
+                if not filtered_temporal.empty:
+                    quality_trends = (
+                        filtered_temporal.groupby(['period_index', 'period_name', 'quality'])
+                        .size()
+                        .unstack(fill_value=0)
+                        .reset_index()
+                        .sort_values('period_index')  # Sort by chronological order
+                    )
+                    
+                    # Show key insights
+                    col_insight1, col_insight2 = st.columns(2)
+                    
+                    with col_insight1:
+                        st.markdown("**📊 Quality Trends:**")
+                        if 'good' in quality_trends.columns:
+                            good_trend = quality_trends['good'].iloc[-1] - quality_trends['good'].iloc[0]
+                            if good_trend > 0:
+                                st.success(f"🟢 Good quality increased by {good_trend} products")
+                            elif good_trend < 0:
+                                st.error(f"🔴 Good quality decreased by {abs(good_trend)} products")
+                            else:
+                                st.info("🟡 Good quality remained stable")
+                    
+                    with col_insight2:
+                        st.markdown("**🎯 Best/Worst Periods:**")
+                        if 'good' in quality_trends.columns:
+                            best_period = quality_trends.loc[quality_trends['good'].idxmax(), 'period_name']
+                            worst_period = quality_trends.loc[quality_trends['good'].idxmin(), 'period_name']
+                            st.info(f"🏆 Best: {best_period}")
+                            st.warning(f"⚠️ Worst: {worst_period}")
+                    
+                    # Show detailed breakdown
+                    with st.expander("📋 View Detailed Quality Data"):
+                        st.dataframe(
+                            quality_trends,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                else:
+                    st.warning("No temporal quality data available for selected items")
+            else:
+                st.info("Select items from the tree to see quality evolution")
+        else:
+            st.info("No items selected. Use the tree on the left to explore the hierarchy.")
+    
+    # Additional insights section
+    st.markdown('<h2 class="section-header">💡 Tree Insights</h2>', unsafe_allow_html=True)
+    
+    if return_select and return_select.get('checked'):
+        selected_values = return_select['checked']
         
-        # Calculate dominant quality for this category
-        color = get_quality_color(cat_products)
+        # Analyze what's expanded vs selected
+        expanded_values = return_select.get('expanded', [])
         
-        source.append(dept_idx)
-        target.append(cat_idx)
-        value.append(max(1, product_count))  # Use product count as width
-        link_colors.append(color)
-    
-    # Categories to Subcategories (width = product count, color = quality)
-    for _, subcat in subcategories.iterrows():
-        cat_idx = len(departments) + categories[categories['id'] == subcat['category_id']].index[0]
-        subcat_idx = len(departments) + len(categories) + subcategories[subcategories['id'] == subcat['id']].index[0]
+        col1, col2 = st.columns(2)
         
-        # Count products and calculate quality in this subcategory
-        subcat_products = products[products['subcategory_id'] == subcat['id']]
-        product_count = len(subcat_products)
+        with col1:
+            st.markdown("#### 🔽 Expanded Nodes")
+            expanded_display = []
+            for value in expanded_values:
+                if value.startswith('dept_'):
+                    dept_id = int(value.replace('dept_', ''))
+                    dept_name = departments[departments['id'] == dept_id]['name'].iloc[0]
+                    expanded_display.append(f"📁 {dept_name}")
+                elif value.startswith('cat_'):
+                    cat_id = int(value.replace('cat_', ''))
+                    cat_name = categories[categories['id'] == cat_id]['name'].iloc[0]
+                    expanded_display.append(f"📂 {cat_name}")
+            
+            if expanded_display:
+                for item in expanded_display:
+                    st.write(item)
+            else:
+                st.info("No nodes expanded")
         
-        # Calculate dominant quality for this subcategory
-        color = get_quality_color(subcat_products)
-        
-        source.append(cat_idx)
-        target.append(subcat_idx)
-        value.append(max(1, product_count))  # Use product count as width
-        link_colors.append(color)
-    
-    # Create the Sankey diagram
-    fig = go.Figure(data=[go.Sankey(
-        node=dict(
-            pad=15,
-            thickness=20,
-            line=dict(color="rgba(0,0,0,0.5)", width=0.5),
-            label=nodes,
-            color=node_colors
-        ),
-        link=dict(
-            source=source,
-            target=target,
-            value=value,
-            color=link_colors
-        )
-    )])
-    
-    fig.update_layout(
-        title="Grocery Store Hierarchy Flow (Width = Product Count, Color = Quality)",
-        title_x=0.5,
-        font_size=12,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=600
-    )
-    
-    return fig
-
-def create_full_sankey_diagram(departments, categories, subcategories, products):
-    """Create a 4-level Sankey diagram (includes products - may be slow)"""
-    
-    # Limit products for performance
-    max_products_per_subcat = 5
-    limited_products = []
-    
-    for _, subcat in subcategories.iterrows():
-        subcat_products = products[products['subcategory_id'] == subcat['id']].head(max_products_per_subcat)
-        limited_products.append(subcat_products)
-    
-    limited_products_df = pd.concat(limited_products, ignore_index=True)
-    
-    # Create the diagram with limited products
-    return create_sankey_diagram_with_products(departments, categories, subcategories, limited_products_df)
-
-def create_sankey_diagram_with_products(departments, categories, subcategories, products):
-    """Helper function to create Sankey with products layer"""
-    
-    # Define colors
-    colors = [
-        "rgba(149, 165, 166, 0.8)",  # Departments - light gray
-        "rgba(127, 140, 141, 0.8)",  # Categories - medium gray
-        "rgba(52, 73, 94, 0.8)",     # Subcategories - dark gray
-        "rgba(44, 62, 80, 0.8)"      # Products - darker gray
-    ]
-    
-    # Create nodes
-    nodes = []
-    node_colors = []
-    
-    # Add all levels
-    for _, dept in departments.iterrows():
-        nodes.append(f"🏪 {dept['name']}")
-        node_colors.append(colors[0])
-    
-    for _, cat in categories.iterrows():
-        nodes.append(f"📦 {cat['name']}")
-        node_colors.append(colors[1])
-    
-    for _, subcat in subcategories.iterrows():
-        nodes.append(f"🔖 {subcat['name']}")
-        node_colors.append(colors[2])
-    
-    for _, product in products.iterrows():
-        nodes.append(f"🛍️ {product['name'][:20]}...")  # Truncate long names
-        node_colors.append(colors[3])
-    
-    # Create links with proper indexing
-    source = []
-    target = []
-    value = []
-    link_colors = []
-    
-    dept_offset = 0
-    cat_offset = len(departments)
-    subcat_offset = len(departments) + len(categories)
-    product_offset = len(departments) + len(categories) + len(subcategories)
-    
-    # Get all products for counting (use original products, not limited)
-    all_products = load_data()[3]  # Get full product list
-    
-    # Departments to Categories (width = product count, color = quality)
-    for _, cat in categories.iterrows():
-        dept_idx = departments[departments['id'] == cat['department_id']].index[0]
-        cat_idx = cat_offset + categories[categories['id'] == cat['id']].index[0]
-        
-        # Count products and calculate quality in this category
-        cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
-        cat_products = all_products[all_products['subcategory_id'].isin(cat_subcats['id'])]
-        product_count = len(cat_products)
-        
-        # Calculate dominant quality for this category
-        color = get_quality_color(cat_products)
-        
-        source.append(dept_idx)
-        target.append(cat_idx)
-        value.append(max(1, product_count))
-        link_colors.append(color)
-    
-    # Categories to Subcategories (width = product count, color = quality)
-    for _, subcat in subcategories.iterrows():
-        cat_idx = cat_offset + categories[categories['id'] == subcat['category_id']].index[0]
-        subcat_idx = subcat_offset + subcategories[subcategories['id'] == subcat['id']].index[0]
-        
-        # Count products and calculate quality in this subcategory
-        subcat_products = all_products[all_products['subcategory_id'] == subcat['id']]
-        product_count = len(subcat_products)
-        
-        # Calculate dominant quality for this subcategory
-        color = get_quality_color(subcat_products)
-        
-        source.append(cat_idx)
-        target.append(subcat_idx)
-        value.append(max(1, product_count))
-        link_colors.append(color)
-    
-    # Subcategories to Products (color = individual product quality)
-    for _, product in products.iterrows():
-        subcat_idx = subcat_offset + subcategories[subcategories['id'] == product['subcategory_id']].index[0]
-        product_idx = product_offset + products[products['id'] == product['id']].index[0]
-        
-        # Color based on individual product quality
-        quality_color = {
-            'good': "rgba(76, 175, 80, 0.4)",    # Green
-            'neutral': "rgba(158, 158, 158, 0.4)", # Gray  
-            'poor': "rgba(244, 67, 54, 0.4)"      # Red
-        }.get(product['quality'], "rgba(158, 158, 158, 0.4)")
-        
-        source.append(subcat_idx)
-        target.append(product_idx)
-        value.append(1)  # Each individual product has weight 1
-        link_colors.append(quality_color)
-    
-    # Create the diagram
-    fig = go.Figure(data=[go.Sankey(
-        node=dict(
-            pad=10,
-            thickness=15,
-            line=dict(color="rgba(0,0,0,0.5)", width=0.5),
-            label=nodes,
-            color=node_colors
-        ),
-        link=dict(
-            source=source,
-            target=target,
-            value=value,
-            color=link_colors
-        )
-    )])
-    
-    fig.update_layout(
-        title="Complete Grocery Store Hierarchy (Width = Product Count, Color = Quality)",
-        title_x=0.5,
-        font_size=10,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=800
-    )
-    
-    return fig
+        with col2:
+            st.markdown("#### ✅ Selected Nodes")
+            selected_display = []
+            for value in selected_values:
+                if value.startswith('dept_'):
+                    dept_id = int(value.replace('dept_', ''))
+                    dept_name = departments[departments['id'] == dept_id]['name'].iloc[0]
+                    selected_display.append(f"🏢 {dept_name}")
+                elif value.startswith('cat_'):
+                    cat_id = int(value.replace('cat_', ''))
+                    cat_name = categories[categories['id'] == cat_id]['name'].iloc[0]
+                    selected_display.append(f"📂 {cat_name}")
+                elif value.startswith('subcat_'):
+                    subcat_id = int(value.replace('subcat_', ''))
+                    subcat_name = subcategories[subcategories['id'] == subcat_id]['name'].iloc[0]
+                    selected_display.append(f"🏷️ {subcat_name}")
+                elif value.startswith('product_'):
+                    product_id = int(value.replace('product_', ''))
+                    product_name = products[products['id'] == product_id]['name'].iloc[0]
+                    selected_display.append(f"🛒 {product_name}")
+            
+            if selected_display:
+                for item in selected_display:
+                    st.write(item)
+            else:
+                st.info("No items selected")
 
 def main():
     """Main application function"""
@@ -740,9 +838,9 @@ def main():
             st.session_state.current_page = 'Data Explorer'
             st.rerun()
             
-        if st.button("🌐 Hierarchy Visualization", use_container_width=True,
-                     type="primary" if st.session_state.current_page == 'Hierarchy' else "secondary"):
-            st.session_state.current_page = 'Hierarchy'
+        if st.button("🌳 Tree Hierarchy", use_container_width=True,
+                     type="primary" if st.session_state.current_page == 'Tree Hierarchy' else "secondary"):
+            st.session_state.current_page = 'Tree Hierarchy'
             st.rerun()
     
     # Route to appropriate page
@@ -750,8 +848,8 @@ def main():
         show_documentation()
     elif st.session_state.current_page == "Data Explorer":
         show_data_explorer()
-    elif st.session_state.current_page == "Hierarchy":
-        show_hierarchy_visualization()
+    elif st.session_state.current_page == "Tree Hierarchy":
+        show_tree_hierarchy()
 
 if __name__ == "__main__":
     main() 
