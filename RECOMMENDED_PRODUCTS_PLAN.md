@@ -196,14 +196,19 @@ flowchart LR
     G --> H{Choose Action}
     H -->|Approve| I[✅ Add to Live Hierarchy]
     H -->|Reject| J[❌ Remove from View]
+    H -->|Approve & Move| K[🔄 Select New Categories]
     I --> L[Log Decision + Reason]
     J --> L
-    L --> M[Update History Dashboard]
+    K --> M[Approve & Move to New Location]
+    M --> L
+    L --> N[Update History Dashboard]
     
     style A fill:#e3f2fd
     style D fill:#fff3e0
     style I fill:#e8f5e8
     style J fill:#ffebee
+    style K fill:#e1f5fe
+    style M fill:#e8f5e8
     style L fill:#f3e5f5
 ```
 
@@ -242,6 +247,69 @@ if selected_recommended_products:
     # Optional decision reasoning
     decision_notes = st.text_area("Decision Notes (Optional)", 
                                  placeholder="Add reasoning for this decision...")
+```
+
+### **Approve & Move Modal Interface**
+```python
+# When user clicks "🔄 Approve & Move" button:
+with st.expander("🔄 Approve & Move Products", expanded=True):
+    st.warning(f"You are approving {len(selected_products)} recommended products:")
+    
+    # Bulk destination selector
+    st.markdown("#### 🎯 Move all products to:")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        new_dept_id = st.selectbox("Department", 
+                                   options=departments['id'].tolist(),
+                                   format_func=lambda x: departments[departments['id']==x]['name'].iloc[0],
+                                   key="bulk_move_dept")
+    with col2:
+        dept_categories = categories[categories['department_id'] == new_dept_id]
+        new_cat_id = st.selectbox("Category",
+                                  options=dept_categories['id'].tolist(),
+                                  format_func=lambda x: categories[categories['id']==x]['name'].iloc[0],
+                                  key="bulk_move_cat")
+    with col3:
+        cat_subcategories = subcategories[subcategories['category_id'] == new_cat_id]
+        new_subcat_id = st.selectbox("Subcategory",
+                                     options=cat_subcategories['id'].tolist(),
+                                     format_func=lambda x: subcategories[subcategories['id']==x]['name'].iloc[0],
+                                     key="bulk_move_subcat")
+    
+    # Show destination path
+    dest_path = f"{departments[departments['id']==new_dept_id]['name'].iloc[0]} > " + \
+                f"{categories[categories['id']==new_cat_id]['name'].iloc[0]} > " + \
+                f"{subcategories[subcategories['id']==new_subcat_id]['name'].iloc[0]}"
+    st.info(f"📍 Destination: {dest_path}")
+    
+    # Show products being moved
+    st.markdown("#### 📦 Products to approve & move:")
+    for product in selected_products:
+        current_path = get_product_hierarchy_path(product['id'])
+        col_prod1, col_prod2 = st.columns([1, 1])
+        with col_prod1:
+            st.write(f"**{product['name']}**")
+            st.caption(f"Currently: {current_path}")
+        with col_prod2:
+            st.write("→")
+            st.caption(f"Moving to: {dest_path}")
+    
+    # Action buttons
+    col_confirm1, col_confirm2 = st.columns(2)
+    with col_confirm1:
+        if st.button("✅ Confirm Approve & Move All", type="primary"):
+            # Validate destination exists
+            if validate_category_path(new_dept_id, new_cat_id, new_subcat_id):
+                # Execute approve + move operation
+                results = bulk_approve_and_move(selected_products, new_subcat_id)
+                st.success(f"✅ Approved and moved {len(results)} products!")
+                st.rerun()
+            else:
+                st.error("❌ Invalid destination category. Please select a valid path.")
+    
+    with col_confirm2:
+        if st.button("❌ Cancel"):
+            st.rerun()
 ```
 
 ### **History & Audit Interface**
@@ -368,6 +436,12 @@ gantt
    - Confirmation dialogs for bulk actions
    - Progress indicators for large batches
 
+3. **Approve & Move Functionality**
+   - Modal dialog for category relocation
+   - Bulk move all selected products to same category
+   - Hierarchical category selection with validation
+   - Combined approve + move action with audit trail
+
 ### **History Tracking Workflow**
 ```mermaid
 flowchart TD
@@ -399,6 +473,8 @@ flowchart TD
 #### **Deliverables**:
 - Select multiple recommended products
 - Bulk approve/reject with confirmation
+- Approve & move products to different categories
+- Modal dialog for category selection with validation
 
 ### **Phase 3: Advanced History & Analytics** ⏱️ *~2 weeks*
 **Goal**: Comprehensive audit trail and decision analytics system
