@@ -522,6 +522,28 @@ def create_quality_distribution_chart(selected_product_ids, temporal_quality):
     
     return fig
 
+def get_status_indicator(status):
+    """Get emoji indicator for product status"""
+    status_indicators = {
+        'approved': '📦',
+        'recommended': '🔍',
+        'rejected': '❌'
+    }
+    return status_indicators.get(status, '📦')
+
+def filter_products_by_status(products, show_recommended=True, show_rejected=False, show_approved=True):
+    """Filter products based on status preferences"""
+    filtered = products.copy()
+    
+    if not show_recommended:
+        filtered = filtered[filtered['status'] != 'recommended']
+    if not show_rejected:
+        filtered = filtered[filtered['status'] != 'rejected']
+    if not show_approved:
+        filtered = filtered[filtered['status'] != 'approved']
+    
+    return filtered
+
 def show_tree_hierarchy():
     """Display interactive tree hierarchy with streamlit-tree-select"""
     st.markdown('<h1 class="main-header">🌳 Interactive Tree Hierarchy</h1>', unsafe_allow_html=True)
@@ -533,13 +555,65 @@ def show_tree_hierarchy():
         st.warning("Please generate sample data first by running `python scripts/generate_data.py`")
         return
     
+    # Product Status Filtering - Add to sidebar
+    with st.sidebar:
+        if st.session_state.current_page == 'Tree Hierarchy':
+            st.markdown("---")
+            st.markdown("### 🎛️ Product Filters")
+            
+            # Status filter controls
+            show_recommended = st.checkbox("🔍 Show Recommended Products", value=True, key="show_recommended")
+            show_approved = st.checkbox("📦 Show Approved Products", value=True, key="show_approved")
+            show_rejected = st.checkbox("❌ Show Rejected Products", value=False, key="show_rejected")
+            
+            # Summary of current filters
+            status_summary = []
+            if show_recommended: status_summary.append("Recommended")
+            if show_approved: status_summary.append("Approved") 
+            if show_rejected: status_summary.append("Rejected")
+            
+            if status_summary:
+                st.info(f"Showing: {', '.join(status_summary)}")
+            else:
+                st.warning("No products will be visible with current filters!")
+    
+    # Filter products based on sidebar controls
+    filtered_products = filter_products_by_status(
+        products, 
+        show_recommended=show_recommended,
+        show_rejected=show_rejected, 
+        show_approved=show_approved
+    )
+    
+    # Show filtering stats
+    total_products = len(products)
+    filtered_count = len(filtered_products)
+    recommended_count = len(products[products['status'] == 'recommended'])
+    
     st.markdown('<h2 class="section-header">🔍 Tree-Based Navigation</h2>', unsafe_allow_html=True)
+    
+    # Display filter statistics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Products", total_products)
+    with col2:
+        st.metric("Showing", filtered_count)
+    with col3:
+        st.metric("Recommended", recommended_count)
+    with col4:
+        approval_rate = f"{(total_products - recommended_count) / total_products * 100:.1f}%" if total_products > 0 else "0%"
+        st.metric("Approval Rate", approval_rate)
     
     st.markdown("""
     <div class="info-box">
     <strong>🎯 Interactive Tree Selection:</strong> This view allows you to select at ALL hierarchy levels! 
     Choose entire departments (🏢), specific categories (📂), subcategories (🏷️), or even individual products (🛒) using the checkbox tree below. 
     The system will intelligently aggregate all your selections - perfect for granular product analysis!
+    <br><br>
+    <strong>📋 Status Indicators:</strong> 
+    🔍 = Recommended (pending approval) | 
+    📦 = Approved (live products) | 
+    ❌ = Rejected (removed from consideration)
     </div>
     """, unsafe_allow_html=True)
     
@@ -551,9 +625,9 @@ def show_tree_hierarchy():
             # Get categories for this department
             dept_categories = categories[categories['department_id'] == dept['id']]
             
-            # Count total products in this department
+            # Count total products in this department (filtered)
             dept_subcats = subcategories[subcategories['category_id'].isin(dept_categories['id'])]
-            dept_products = products[products['subcategory_id'].isin(dept_subcats['id'])]
+            dept_products = filtered_products[filtered_products['subcategory_id'].isin(dept_subcats['id'])]
             dept_count = len(dept_products)
             
             dept_node = {
@@ -565,7 +639,7 @@ def show_tree_hierarchy():
             for _, cat in dept_categories.iterrows():
                 # Get subcategories for this category
                 cat_subcats = subcategories[subcategories['category_id'] == cat['id']]
-                cat_products = products[products['subcategory_id'].isin(cat_subcats['id'])]
+                cat_products = filtered_products[filtered_products['subcategory_id'].isin(cat_subcats['id'])]
                 cat_count = len(cat_products)
                 
                 cat_node = {
@@ -575,8 +649,8 @@ def show_tree_hierarchy():
                 }
                 
                 for _, subcat in cat_subcats.iterrows():
-                    # Get products for this subcategory
-                    subcat_products = products[products['subcategory_id'] == subcat['id']]
+                    # Get products for this subcategory (filtered)
+                    subcat_products = filtered_products[filtered_products['subcategory_id'] == subcat['id']]
                     subcat_count = len(subcat_products)
                     
                     subcat_node = {
@@ -585,19 +659,36 @@ def show_tree_hierarchy():
                         "children": []
                     }
                     
-                    # Add individual products as children of subcategory
+                    # Add individual products as children of subcategory with status indicators
                     for _, product in subcat_products.iterrows():
+                        # Get status indicator emoji
+                        status_emoji = get_status_indicator(product['status'])
+                        
+                        # Create product label with status indicator
+                        if product['status'] == 'recommended':
+                            label = f"{status_emoji} {product['name']} - ${product['price']:.2f} (RECOMMENDED)"
+                        elif product['status'] == 'rejected':
+                            label = f"{status_emoji} {product['name']} - ${product['price']:.2f} (REJECTED)"
+                        else:  # approved
+                            label = f"{status_emoji} {product['name']} - ${product['price']:.2f}"
+                        
                         product_node = {
-                            "label": f"{product['name']} - ${product['price']:.2f}",
+                            "label": label,
                             "value": f"product_{product['id']}"
                         }
                         subcat_node["children"].append(product_node)
                     
-                    cat_node["children"].append(subcat_node)
+                    # Only add subcategory if it has products
+                    if subcat_count > 0:
+                        cat_node["children"].append(subcat_node)
                 
-                dept_node["children"].append(cat_node)
+                # Only add category if it has products  
+                if cat_count > 0:
+                    dept_node["children"].append(cat_node)
             
-            tree_nodes.append(dept_node)
+            # Only add department if it has products
+            if dept_count > 0:
+                tree_nodes.append(dept_node)
         
         return tree_nodes
     
