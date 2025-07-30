@@ -551,6 +551,37 @@ def create_count_label(name, total_products, recommended_products):
     else:
         return f"{name} ({total_products} products)"
 
+def filter_selected_products_by_status(product_ids, products_df):
+    """Filter selected products by status and return counts"""
+    selected_products = products_df[products_df['id'].isin(product_ids)]
+    
+    status_breakdown = {
+        'recommended': selected_products[selected_products['status'] == 'recommended'],
+        'approved': selected_products[selected_products['status'] == 'approved'],
+        'rejected': selected_products[selected_products['status'] == 'rejected']
+    }
+    
+    return status_breakdown
+
+def bulk_update_product_status(product_ids, new_status, reviewed_by="Manager", review_reason="Bulk operation"):
+    """Update product status for multiple products"""
+    import pandas as pd
+    from datetime import datetime
+    
+    # Load current products
+    products_df = pd.read_csv('data/products.csv')
+    
+    # Update status for selected products
+    mask = products_df['id'].isin(product_ids)
+    products_df.loc[mask, 'status'] = new_status
+    products_df.loc[mask, 'reviewed_by'] = reviewed_by
+    products_df.loc[mask, 'review_date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Save updated products
+    products_df.to_csv('data/products.csv', index=False)
+    
+    return len(product_ids)
+
 def show_tree_hierarchy():
     """Display interactive tree hierarchy with streamlit-tree-select"""
     st.markdown('<h1 class="main-header">🌳 Interactive Tree Hierarchy</h1>', unsafe_allow_html=True)
@@ -583,6 +614,63 @@ def show_tree_hierarchy():
                 st.info(f"Showing: {', '.join(status_summary)}")
             else:
                 st.warning("No products will be visible with current filters!")
+            
+            # ========== SESSION MANAGEMENT ==========
+            st.markdown("---")
+            st.markdown("### 📝 Review Session")
+            
+            # Initialize session state for review tracking
+            if 'review_session_active' not in st.session_state:
+                st.session_state.review_session_active = False
+                st.session_state.session_start_time = None
+                st.session_state.session_approvals = 0
+                st.session_state.session_rejections = 0
+            
+            # Session controls
+            if not st.session_state.review_session_active:
+                if st.button("▶️ Start Review Session", use_container_width=True, type="primary"):
+                    from datetime import datetime
+                    st.session_state.review_session_active = True
+                    st.session_state.session_start_time = datetime.now()
+                    st.session_state.session_approvals = 0
+                    st.session_state.session_rejections = 0
+                    st.success("📝 Review session started!")
+                    st.rerun()
+                
+                st.info("💡 Start a session to track your review progress")
+            
+            else:
+                # Show active session info
+                from datetime import datetime
+                duration = datetime.now() - st.session_state.session_start_time
+                duration_minutes = int(duration.total_seconds() // 60)
+                
+                st.success("🟢 Active Session")
+                
+                col_session1, col_session2 = st.columns(2)
+                with col_session1:
+                    st.metric("⏱️ Duration", f"{duration_minutes}m")
+                with col_session2:
+                    total_actions = st.session_state.session_approvals + st.session_state.session_rejections
+                    st.metric("⚡ Actions", total_actions)
+                
+                # Session details
+                col_app, col_rej = st.columns(2)
+                with col_app:
+                    st.metric("✅ Approved", st.session_state.session_approvals)
+                with col_rej:
+                    st.metric("❌ Rejected", st.session_state.session_rejections)
+                
+                # End session button
+                if st.button("⏹️ End Session", use_container_width=True, type="secondary"):
+                    total_actions = st.session_state.session_approvals + st.session_state.session_rejections
+                    st.info(f"📊 Session Summary: {total_actions} actions in {duration_minutes} minutes")
+                    st.session_state.review_session_active = False
+                    st.session_state.session_start_time = None
+                    st.session_state.session_approvals = 0
+                    st.session_state.session_rejections = 0
+                    st.rerun()
+            # ========== END SESSION MANAGEMENT ==========
     
     # Filter products based on sidebar controls
     filtered_products = filter_products_by_status(
@@ -787,6 +875,153 @@ def show_tree_hierarchy():
                     ]
                     good_count = len(current_quality[current_quality['quality'] == 'good'])
                     st.metric("Current Good Quality", f"{good_count}")
+                
+                # ========== BULK OPERATIONS PANEL ==========
+                st.markdown("---")
+                st.markdown("### 🔧 Bulk Operations")
+                
+                # Filter selected products by status
+                status_breakdown = filter_selected_products_by_status(list(all_relevant_product_ids), products)
+                
+                # Show status breakdown of selections
+                col_status1, col_status2, col_status3, col_status4 = st.columns(4)
+                
+                with col_status1:
+                    rec_count = len(status_breakdown['recommended'])
+                    st.metric("🔍 Recommended", rec_count)
+                
+                with col_status2:
+                    app_count = len(status_breakdown['approved'])
+                    st.metric("📦 Approved", app_count)
+                
+                with col_status3:
+                    rej_count = len(status_breakdown['rejected'])
+                    st.metric("❌ Rejected", rej_count)
+                
+                with col_status4:
+                    total_actionable = rec_count + rej_count  # Can approve recommended or re-approve rejected
+                    st.metric("⚡ Actionable", total_actionable)
+                
+                # Bulk Action Controls - Only show if there are actionable items
+                if rec_count > 0 or rej_count > 0:
+                    st.markdown("#### 🎯 Bulk Actions")
+                    
+                    # Action buttons
+                    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+                    
+                    with col_btn1:
+                        if rec_count > 0:
+                            if st.button(f"✅ Approve All Recommended ({rec_count})", 
+                                       type="primary", 
+                                       use_container_width=True,
+                                       key="bulk_approve"):
+                                
+                                # Confirmation dialog
+                                recommended_ids = status_breakdown['recommended']['id'].tolist()
+                                recommended_names = status_breakdown['recommended']['name'].tolist()
+                                
+                                with st.expander("⚠️ Confirm Bulk Approval", expanded=True):
+                                    st.warning(f"You are about to approve {rec_count} recommended products:")
+                                    for name in recommended_names[:5]:  # Show first 5
+                                        st.write(f"• {name}")
+                                    if len(recommended_names) > 5:
+                                        st.write(f"• ... and {len(recommended_names) - 5} more")
+                                    
+                                    reason = st.text_input("Approval reason (optional):", 
+                                                         value="Bulk approval - management review",
+                                                         key="approve_reason")
+                                    
+                                    col_confirm1, col_confirm2 = st.columns(2)
+                                    with col_confirm1:
+                                        if st.button("✅ Confirm Approval", type="primary", key="confirm_approve"):
+                                            # Perform bulk approval
+                                            updated_count = bulk_update_product_status(
+                                                recommended_ids, 
+                                                'approved', 
+                                                reviewed_by="Manager",
+                                                review_reason=reason
+                                            )
+                                            
+                                            # Update session tracking
+                                            if st.session_state.review_session_active:
+                                                st.session_state.session_approvals += updated_count
+                                            
+                                            st.success(f"✅ Successfully approved {updated_count} products!")
+                                            st.rerun()
+                                    
+                                    with col_confirm2:
+                                        if st.button("❌ Cancel", key="cancel_approve"):
+                                            st.rerun()
+                    
+                    with col_btn2:
+                        if rec_count > 0:
+                            if st.button(f"❌ Reject All Recommended ({rec_count})", 
+                                       type="secondary", 
+                                       use_container_width=True,
+                                       key="bulk_reject"):
+                                
+                                # Confirmation dialog
+                                recommended_ids = status_breakdown['recommended']['id'].tolist()
+                                recommended_names = status_breakdown['recommended']['name'].tolist()
+                                
+                                with st.expander("⚠️ Confirm Bulk Rejection", expanded=True):
+                                    st.error(f"You are about to reject {rec_count} recommended products:")
+                                    for name in recommended_names[:5]:  # Show first 5
+                                        st.write(f"• {name}")
+                                    if len(recommended_names) > 5:
+                                        st.write(f"• ... and {len(recommended_names) - 5} more")
+                                    
+                                    reason = st.text_input("Rejection reason:", 
+                                                         placeholder="Why are these products being rejected?",
+                                                         key="reject_reason")
+                                    
+                                    if reason:  # Only allow rejection with a reason
+                                        col_confirm1, col_confirm2 = st.columns(2)
+                                        with col_confirm1:
+                                            if st.button("❌ Confirm Rejection", type="primary", key="confirm_reject"):
+                                                # Perform bulk rejection
+                                                updated_count = bulk_update_product_status(
+                                                    recommended_ids, 
+                                                    'rejected', 
+                                                    reviewed_by="Manager",
+                                                    review_reason=reason
+                                                )
+                                                
+                                                # Update session tracking
+                                                if st.session_state.review_session_active:
+                                                    st.session_state.session_rejections += updated_count
+                                                
+                                                st.success(f"❌ Successfully rejected {updated_count} products!")
+                                                st.rerun()
+                                        
+                                        with col_confirm2:
+                                            if st.button("🔙 Cancel", key="cancel_reject"):
+                                                st.rerun()
+                                    else:
+                                        st.info("💡 Please provide a reason for rejection")
+                    
+                    with col_btn3:
+                        if rec_count > 0:
+                            if st.button(f"⏭️ Defer All ({rec_count})", 
+                                       use_container_width=True,
+                                       key="bulk_defer"):
+                                st.info("⏭️ Defer functionality will be implemented in Phase 3")
+                    
+                    with col_btn4:
+                        st.button("📊 Review History", 
+                                use_container_width=True,
+                                key="view_history",
+                                help="History tracking will be implemented in Phase 3")
+                
+                elif app_count > 0:
+                    st.info("📦 Selected products are already approved. Use filters to view recommended products for bulk actions.")
+                else:
+                    st.info("🔍 Select some recommended products to see bulk action options.")
+                
+                # ========== END BULK OPERATIONS PANEL ==========
+                
+                st.markdown("---")
+                st.markdown("### 📊 Quality Evolution Over Time")
                 
                 # Create and display quality distribution chart
                 dist_chart = create_quality_distribution_chart(list(all_relevant_product_ids), temporal_quality)
